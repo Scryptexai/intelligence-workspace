@@ -3,8 +3,11 @@ import { pingDatabase, isDbConfigured } from "@/db";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/health — cek DB (jika dikonfigurasi). Tanpa DATABASE_URL,
- * aplikasi tetap sehat (mode mock) — bukan error.
+ * GET /api/health
+ * - Tanpa DATABASE_URL        → { ok:true, database:"mock" } (mode data riset lokal)
+ * - DB dikonfigurasi & hidup   → { ok:true, database:"connected" }
+ * - DB dikonfigurasi tapi tak terjangkau → { ok:true, database:"unreachable" }
+ *   (aplikasi tetap jalan via fallback mock — tidak pernah crash)
  */
 export async function GET() {
   if (!isDbConfigured()) {
@@ -15,5 +18,10 @@ export async function GET() {
     });
   }
   const ok = await pingDatabase();
-  return Response.json({ ok, database: ok ? "connected" : "error" }, ok ? {} : { status: 500 });
+  if (ok) return Response.json({ ok: true, database: "connected" });
+  return Response.json({
+    ok: true,
+    database: "unreachable",
+    note: "DATABASE_URL diset tapi tidak terjangkau — memakai fallback mock. Pastikan IPv6/pooler tersedia.",
+  });
 }
