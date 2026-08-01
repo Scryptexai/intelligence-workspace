@@ -33,12 +33,18 @@ export const db = isDbConfigured() && pool ? drizzle(pool, { schema }) : null;
 
 /** Uji koneksi singkat — dipakai /api/health. */
 export async function pingDatabase(): Promise<boolean> {
-  if (!db || !pool) return false;
+  const result = await pingDatabaseVerbose();
+  return result.ok;
+}
+
+/** Sama seperti pingDatabase(), tapi menyertakan pesan error asli untuk diagnosis. */
+export async function pingDatabaseVerbose(): Promise<{ ok: boolean; error?: string }> {
+  if (!db || !pool) return { ok: false, error: "pool not initialized" };
   try {
     await pool.query("select 1");
-    return true;
-  } catch {
-    return false;
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
 
