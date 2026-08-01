@@ -21,6 +21,12 @@ export const pool: Pool | null = isDbConfigured()
       connectionString: databaseUrl,
       max: 10,
       idleTimeoutMillis: 30_000,
+      // Supabase's pooler (Supavisor) presents a cert chain Node's default trust store
+      // doesn't recognize -- pg reports it as "self-signed certificate in certificate
+      // chain" (verified via /api/health's diagnostic error, 2026-08-01). The connection
+      // stays encrypted; only the CA chain verification is relaxed, which is Supabase's
+      // own standard guidance for connecting via `pg`/node-postgres from serverless.
+      ssl: { rejectUnauthorized: false },
     })
   : null;
 
