@@ -11,6 +11,38 @@ const databaseUrl = process.env.DATABASE_URL;
 
 export const isDbConfigured = (): boolean => Boolean(databaseUrl);
 
+/** Whether the raw DATABASE_URL carried a sslmode/ssl query param (diagnostic only, no secrets). */
+export const hadSslModeParam = (): boolean => {
+  if (!databaseUrl) return false;
+  try {
+    const parsed = new URL(databaseUrl);
+    return parsed.searchParams.has("sslmode") || parsed.searchParams.has("ssl");
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * pg's connection-string parser (pg-connection-string) derives its own ssl config from a
+ * `sslmode`/`ssl` query param and that can fight with an explicit `ssl` option passed to
+ * `new Pool()` -- confirmed 2026-08-02: /api/health's errorSource showed the TLS rejection
+ * was still client-side (SELF_SIGNED_CERT_IN_CHAIN) even with `ssl: { rejectUnauthorized:
+ * false }` set, meaning that object wasn't actually winning. Stripping the query param
+ * removes the ambiguity so our explicit object is the only ssl config in play.
+ */
+function stripSslModeParam(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.searchParams.delete("sslmode");
+    parsed.searchParams.delete("ssl");
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+const poolConnectionString = databaseUrl ? stripSslModeParam(databaseUrl) : undefined;
+
 const globalForDb = globalThis as typeof globalThis & {
   __iwPgPool?: Pool;
 };
@@ -18,7 +50,7 @@ const globalForDb = globalThis as typeof globalThis & {
 export const pool: Pool | null = isDbConfigured()
   ? globalForDb.__iwPgPool ??
     new Pool({
-      connectionString: databaseUrl,
+      connectionString: poolConnectionString,
       max: 10,
       idleTimeoutMillis: 30_000,
       // Supabase's pooler (Supavisor) presents a cert chain Node's default trust store

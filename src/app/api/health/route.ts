@@ -1,4 +1,4 @@
-import { pingDatabaseVerbose, isDbConfigured } from "@/db";
+import { pingDatabaseVerbose, isDbConfigured, hadSslModeParam } from "@/db";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +25,7 @@ export async function GET() {
     database: "unreachable",
     error: result.error,
     errorSource: result.errorSource,
+    hadSslModeParam: hadSslModeParam(),
     note: "DATABASE_URL diset tapi tidak terjangkau — memakai fallback mock.",
   });
 }
