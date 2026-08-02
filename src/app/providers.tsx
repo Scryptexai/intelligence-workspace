@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ThemeProvider } from "next-themes";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { syncDataSourceFromServer } from "@/lib/api/config";
 import type { ReactNode } from "react";
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -18,6 +19,20 @@ export function Providers({ children }: { children: ReactNode }) {
         },
       })
   );
+
+  // Auto-detect sumber data: jika server melaporkan database terhubung
+  // (Supabase/PostgreSQL), repository beralih dari mock → backend lalu semua
+  // query di-refetch sehingga data Supabase langsung tampil tanpa reload.
+  useEffect(() => {
+    let cancelled = false;
+    syncDataSourceFromServer().then((switchedToBackend) => {
+      if (cancelled || !switchedToBackend) return;
+      queryClient.invalidateQueries();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [queryClient]);
 
   return (
     <QueryClientProvider client={queryClient}>

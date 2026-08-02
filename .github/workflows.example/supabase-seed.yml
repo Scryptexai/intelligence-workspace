@@ -1,0 +1,42 @@
+name: Supabase Seed
+
+# Otomatis mengisi database Supabase (tabel relasional Intelligence Workspace)
+# setiap ada push ke master — via REST (PostgREST), tanpa koneksi pg langsung.
+#
+# Setup sekali saja (1 menit):
+#   GitHub repo → Settings → Secrets and variables → Actions → New repository secret:
+#     SUPABASE_URL            = https://uqtvjerhgvwoxiejvrli.supabase.co
+#     SUPABASE_SECRET_KEY     = sb_secret_...   (service role key, Settings → API)
+# Workflow ini otomatis SKIP jika secret belum diisi.
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    if: ${{ secrets.SUPABASE_URL != '' && secrets.SUPABASE_SECRET_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Seed Supabase via REST (idempotent — skip jika sudah terisi)
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: npx tsx scripts/seed-rest.ts
+
+      - name: Verifikasi isi tabel
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: npx tsx scripts/seed-rest.ts --dry-run
