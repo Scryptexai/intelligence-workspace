@@ -66,11 +66,16 @@ Salin `.env.example` → `.env.local`. Semua variabel **opsional** (mock mode de
 
 | Variable | Default | Fungsi |
 |---|---|---|
-| `NEXT_PUBLIC_DATA_SOURCE` | `mock` | `mock` = data dari `lib/data` (offline) · `backend` = panggil REST API |
+| `NEXT_PUBLIC_DATA_SOURCE` | otomatis | `mock` = data dari `lib/data` (offline) · `backend` = panggil REST API. **Sejak v2.1 auto-detect**: tidak perlu diset — server otomatis memakai `backend` jika Supabase/PostgreSQL terkonfigurasi, dan frontend ikut beralih saat boot |
 | `NEXT_PUBLIC_API_BASE_URL` | `/api` | Base URL backend (same-origin `/api` atau URL absolut, mis. `https://api.anda.com/api`) |
 | `API_TOKEN` | — | Token opsional → dikirim sebagai `Authorization: Bearer` (server-side) |
-| `DATABASE_URL` | — | Hanya untuk `/api/health` & mode backend dengan DB (PostgreSQL) |
-| `NODE_ENV` | otomatis | `development` / `production` |
+| `DATABASE_URL` | — | Koneksi PostgreSQL langsung (pg). Juga membuat `/api/health` hijau |
+| `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SECRET_KEY` | — | **Cara termudah pakai Supabase** — server membaca tabel relasional via PostgREST (HTTPS); frontend otomatis memuat datanya |
+
+> 💡 **Supabase "tidak terload" di frontend?** Cukup set `NEXT_PUBLIC_SUPABASE_URL`
+> dan `SUPABASE_SECRET_KEY` lalu jalankan seed (lihat bagian Supabase di bawah).
+> Frontend mendeteksi database secara otomatis saat boot — badge di header
+> berubah menjadi **"Supabase"** (hijau). Tidak perlu `NEXT_PUBLIC_DATA_SOURCE=backend`.
 
 Contoh mode backend:
 
@@ -212,34 +217,51 @@ vercel --prod
 Skema database lengkap sudah disiapkan di `src/db/schema.ts` (13 tabel relasional)
 dan migration SQL siap-merge di `drizzle/0000_*.sql`.
 
+**Cara tercepat (rekomendasi — tanpa koneksi DB langsung):**
+
 ```bash
-# 1. Buat project di Supabase → dapatkan connection string
-#    Settings → Database → Connection string (mode transaction / pooled)
+# 1. Buat project di Supabase → Settings → API, salin:
+#    NEXT_PUBLIC_SUPABASE_URL=https://<ref>.supabase.co
+#    SUPABASE_SECRET_KEY=sb_secret_...
+#    (simpan di .env.local — frontend otomatis mendeteksi, tidak perlu
+#     NEXT_PUBLIC_DATA_SOURCE=backend)
 
-# 2. Set env
-#    NEXT_PUBLIC_DATA_SOURCE=backend
-#    DATABASE_URL=postgresql://postgres:postgres@db.xxxx.supabase.co:5432/postgres?sslmode=require
+# 2. Terapkan skema: tempel isi drizzle/0000_*.sql di Supabase SQL Editor → Run
+#    (atau: npx drizzle-kit push dengan DATABASE_URL)
 
-# 3. Terapkan skema ke Supabase (buat semua tabel + index)
-npx drizzle-kit push
+# 3. Isi data lengkap: tempel isi supabase/seed.sql di Supabase SQL Editor → Run
+#    (2 proyek · 22 knowledge · 41 evidence · 37 entities · 41 relasi ·
+#     30 events · 13 conflicts · QA & behavior — idempotent, aman diulang)
 
-# 4. Isi data awal (semua knowledge, entities, events, conflicts, QA, behavior)
-npx tsx src/db/seed.ts
-
-# 5. Jalankan — API otomatis baca dari Supabase (fallback mock jika DB mati)
+# 4. Jalankan — header menampilkan badge "Supabase" (hijau) = data dari DB
 npm run dev
 ```
 
-Alternatif manual di Supabase SQL Editor:
-1. Salin isi `drizzle/0000_*.sql` → Run (buat tabel)
-2. Salin isi `supabase/seed.sql` → Run (data contoh), atau `npx tsx src/db/seed.ts` untuk data lengkap
+Alternatif dengan koneksi langsung (`DATABASE_URL`):
+
+```bash
+# 1. Set env
+#    DATABASE_URL=postgresql://postgres:postgres@db.xxxx.supabase.co:5432/postgres?sslmode=require
+
+# 2. Terapkan skema ke Supabase (buat semua tabel + index)
+npx drizzle-kit push
+
+# 3. Isi data awal (semua knowledge, entities, events, conflicts, QA, behavior)
+npx tsx src/db/seed.ts
+```
+
+**Regenerasi `supabase/seed.sql`** bila data riset mock berubah:
+
+```bash
+npx tsx scripts/build-seed-sql.ts
+```
 
 **Tabel yang dibuat:** `projects`, `knowledge_items`, `evidence_items`, `entities`,
 `relationships`, `events`, `conflicts`, `qa_dimensions`, `qa_phases`,
 `behavior_profiles`, `notes`, `saved_views`, `users` — lengkap dengan FK & index.
 
-> Tanpa `DATABASE_URL`, aplikasi jalan penuh di mock mode. Set `DATABASE_URL`
-> → API server membaca dari database (health jadi `connected`).
+> Prioritas sumber data server: **Supabase REST → pg (`DATABASE_URL`) → mock**.
+> Tanpa env apa pun, aplikasi jalan penuh di mock mode (badge header "Mock data").
 
 ---
 
@@ -247,6 +269,8 @@ Alternatif manual di Supabase SQL Editor:
 
 | Masalah | Solusi |
 |---|---|
+| **Supabase sudah diset tapi UI tetap data mock** | Cek header: badge harus "**Supabase**" (hijau). Pastikan `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SECRET_KEY` ada di `.env.local` (server perlu restart setelah ubah env), tabel sudah dibuat (`drizzle/0000_*.sql`), dan data sudah di-seed (`supabase/seed.sql`). Cek `/api/config` → `database` harus `supabase-rest` |
+| Badge header "Supabase" tapi halaman kosong | Database belum di-seed — tempel `supabase/seed.sql` di Supabase SQL Editor, atau `npx tsx src/db/seed.ts` |
 | `DATABASE_URL is required` saat buka `/api/health` | Set `DATABASE_URL`, atau abaikan — endpoint lain tetap jalan di mock mode |
 | Halaman Knowledge reload terus-menerus | Pastikan memakai kode terbaru (bug loop `router.replace` sudah diperbaiki) — `git pull` + `npm install` |
 | Logo/entity tidak muncul | Koneksi ke CDN (simpleicons, dll) dibutuhkan; jika offline, fallback icon tipe otomatis tampil |

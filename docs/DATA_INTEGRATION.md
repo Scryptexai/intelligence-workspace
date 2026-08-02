@@ -56,7 +56,7 @@ Sisa `lib/data` yang masih dipakai secara langsung:
 
 ## 3. Swap ke Backend/Database
 
-Tanpa mengubah satu baris kode UI:
+### 3a. Mode eksplisit (cara lama)
 
 ```bash
 # .env.local
@@ -67,6 +67,35 @@ NEXT_PUBLIC_API_BASE_URL=https://api.workspace.example.com/api
 
 Backend sungguhan cukup mengimplementasikan kontrak REST di `endpoints.ts`.
 Semua response sudah dinormalisasi lewat `apiFetch` (error, timeout, auth bearer).
+
+### 3b. AUTO-DETECT (default sejak v2.1) — Supabase langsung terload
+
+`NEXT_PUBLIC_DATA_SOURCE` **tidak wajib diset**:
+
+- **Server-side** (`src/lib/api/config.ts`): jika env tidak eksplisit, mode
+  otomatis `backend` saat Supabase REST (`NEXT_PUBLIC_SUPABASE_URL` +
+  `SUPABASE_SECRET_KEY`) atau `DATABASE_URL` terkonfigurasi — jadi SSR dan
+  API routes langsung membaca database.
+- **Client-side**: `Providers` memanggil `syncDataSourceFromServer()` saat
+  boot → membaca `/api/config`. Jika server melaporkan `database` =
+  `connected`/`supabase-rest` (atau `dataSource: backend`), repository
+  beralih dari mock → backend dan TanStack Query di-invalidate sehingga
+  data Supabase tampil tanpa reload. Badge di header menampilkan
+  **"Supabase"** / **"Database"** (hijau) vs **"Mock data"** (abu-abu).
+- Pengguna yang menyetel `NEXT_PUBLIC_DATA_SOURCE` secara eksplisit
+  (mock ATAU backend) tetap dihormati — auto-detect tidak menimpa.
+
+Alur deteksi:
+
+```
+browser boot
+  └─ syncDataSourceFromServer()  GET /api/config
+        ├─ dataSource=backend | database=connected|supabase-rest  → mode backend
+        └─ database=mock | unreachable                            → tetap mock (tidak crash)
+```
+
+`/api/config` melaporkan `database`: `mock` | `connected` (pg) | `supabase-rest`
+(PostgREST) — dipakai badge UI dan auto-detect client.
 
 ## 4. Endpoint API (kontrak)
 

@@ -32,6 +32,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useUIStore, type Density } from "@/lib/store/ui";
+import { DataSourceBadge } from "./DataSourceBadge";
 import { TimeRangePicker } from "./TimeRangePicker";
 
 export function Header() {
@@ -91,6 +92,8 @@ export function Header() {
           </kbd>
         </button>
       </div>
+
+      <DataSourceBadge className="hidden lg:inline-flex" />
 
       <TimeRangePicker />
 
