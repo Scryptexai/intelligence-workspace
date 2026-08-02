@@ -60,6 +60,13 @@ export const isServerSide = typeof window === "undefined";
 export function serverApiBaseUrl(): string {
   const configured = process.env.NEXT_PUBLIC_API_BASE_URL;
   if (configured) return configured.replace(/\/$/, "");
+  // VERCEL_URL is the ephemeral per-deployment hostname (e.g. intelligence-workspace-cf2pr...
+  // .vercel.app) -- it's still behind this project's Vercel Authentication wall, so an SSR
+  // self-fetch against it gets redirected to an HTML login page instead of JSON (confirmed
+  // live, 2026-08-02: "Unexpected token '<'... is not valid JSON", digest 2384324333).
+  // VERCEL_PROJECT_PRODUCTION_URL is Vercel's own stable production alias, set on every
+  // deployment including Preview -- use it first since it isn't behind that wall.
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}/api`;
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}/api`;
   return "http://localhost:3000/api";
 }
