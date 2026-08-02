@@ -45,8 +45,11 @@ import type { TimelineEvent } from "@/lib/types/event";
 import type { Conflict } from "@/lib/types/conflict";
 import type { SearchResult } from "@/lib/data";
 import type { ListParams } from "@/lib/api/types";
+import { supabaseRest, supabaseRestEnabled } from "./supabaseService";
 
 const DB = isDbConfigured();
+/** Prioritas sumber: Supabase REST (cif_datasets) → pg pool → mock. */
+const REST = supabaseRestEnabled;
 
 /* ══════════════════════════════════════════════════════════════════ */
 /* Mapper: DB row (snake_case) → tipe aplikasi (camelCase)            */
@@ -136,6 +139,13 @@ async function assembleProject(slug: string): Promise<Project | undefined> {
 /* ══════════════════════════════════════════════════════════════════ */
 
 export async function dbListProjects(): Promise<Project[]> {
+  if (REST) {
+    try {
+      return await supabaseRest.listProjects();
+    } catch {
+      /* lanjut ke pg/mock */
+    }
+  }
   if (!db) return getMockProjects();
   try {
     const rows = await db.select().from(projectsTable).orderBy(asc(projectsTable.createdAt));
@@ -173,6 +183,14 @@ export async function dbListProjects(): Promise<Project[]> {
 }
 
 export async function dbGetProject(slug: string): Promise<Project | undefined> {
+  if (REST) {
+    try {
+      const p = await supabaseRest.getProject(slug);
+      if (p) return p;
+    } catch {
+      /* lanjut */
+    }
+  }
   try {
     return await assembleProject(slug);
   } catch {
@@ -185,6 +203,19 @@ export async function dbGetProject(slug: string): Promise<Project | undefined> {
 /* ══════════════════════════════════════════════════════════════════ */
 
 export async function dbListKnowledge(slug: string, params?: ListParams): Promise<KnowledgeItem[]> {
+  if (REST) {
+    try {
+      let items = await supabaseRest.listKnowledge(slug);
+      if (params?.status) items = items.filter((k) => k.status === params.status);
+      if (params?.q) {
+        const q = params.q.toLowerCase();
+        items = items.filter((k) => k.name.toLowerCase().includes(q) || k.id.toLowerCase().includes(q));
+      }
+      return items;
+    } catch {
+      /* lanjut */
+    }
+  }
   if (!db) {
     let items = getMockKnowledge(slug);
     if (params?.status) items = items.filter((k) => k.status === params.status);
@@ -254,6 +285,14 @@ export async function dbGetKnowledgeItem(
   slug: string,
   id: string
 ): Promise<KnowledgeItem | undefined> {
+  if (REST) {
+    try {
+      const item = await supabaseRest.getKnowledgeItem(slug, id);
+      if (item) return item;
+    } catch {
+      /* lanjut */
+    }
+  }
   if (!db) return getMockKnowledgeItem(slug, id);
   try {
     const rows = await db
@@ -274,6 +313,13 @@ export async function dbGetKnowledgeItem(
 /* ══════════════════════════════════════════════════════════════════ */
 
 export async function dbListEntities(slug: string): Promise<Entity[]> {
+  if (REST) {
+    try {
+      return await supabaseRest.listEntities(slug);
+    } catch {
+      /* lanjut */
+    }
+  }
   if (!db) return getMockEntities(slug);
   try {
     const rows = await db
@@ -299,6 +345,14 @@ export async function dbListEntities(slug: string): Promise<Entity[]> {
 }
 
 export async function dbGetEntity(slug: string, id: string): Promise<Entity | undefined> {
+  if (REST) {
+    try {
+      const e = await supabaseRest.getEntity(slug, id);
+      if (e) return e;
+    } catch {
+      /* lanjut */
+    }
+  }
   if (!db) return getMockEntity(slug, id);
   try {
     const rows = await db
@@ -326,6 +380,13 @@ export async function dbGetEntity(slug: string, id: string): Promise<Entity | un
 }
 
 export async function dbListRelationships(slug: string): Promise<Relationship[]> {
+  if (REST) {
+    try {
+      return await supabaseRest.listRelationships(slug);
+    } catch {
+      /* lanjut */
+    }
+  }
   if (!db) return getMockRelationships(slug);
   try {
     const rows = await db
@@ -348,6 +409,13 @@ export async function dbListRelationships(slug: string): Promise<Relationship[]>
 /* ══════════════════════════════════════════════════════════════════ */
 
 export async function dbListEvents(slug: string): Promise<TimelineEvent[]> {
+  if (REST) {
+    try {
+      return await supabaseRest.listEvents(slug);
+    } catch {
+      /* lanjut */
+    }
+  }
   if (!db) return getMockEvents(slug);
   try {
     const rows = await db
@@ -379,6 +447,16 @@ export async function dbListEvents(slug: string): Promise<TimelineEvent[]> {
 /* ══════════════════════════════════════════════════════════════════ */
 
 export async function dbListConflicts(slug: string, params?: ListParams): Promise<Conflict[]> {
+  if (REST) {
+    try {
+      let items = await supabaseRest.listConflicts(slug);
+      if (params?.severity) items = items.filter((c) => c.severity === params.severity);
+      if (params?.status) items = items.filter((c) => c.status === params.status);
+      return items;
+    } catch {
+      /* lanjut */
+    }
+  }
   if (!db) {
     let items = getMockConflicts(slug);
     if (params?.severity) items = items.filter((c) => c.severity === params.severity);
@@ -414,6 +492,14 @@ export async function dbGetConflict(
   slug: string,
   id: string
 ): Promise<Conflict | undefined> {
+  if (REST) {
+    try {
+      const c = await supabaseRest.getConflict(slug, id);
+      if (c) return c;
+    } catch {
+      /* lanjut */
+    }
+  }
   if (!db) return getMockConflict(slug, id);
   try {
     const rows = await db
@@ -453,6 +539,14 @@ export async function dbGetQa(slug: string): Promise<QAReport | undefined> {
 }
 
 export async function dbGetBehavior(slug: string): Promise<BehaviorProfile | undefined> {
+  if (REST) {
+    try {
+      const p = await supabaseRest.getProject(slug);
+      if (p) return p.behavior;
+    } catch {
+      /* lanjut */
+    }
+  }
   if (!db) return behaviorMock[slug];
   try {
     const rows = await db
@@ -478,6 +572,13 @@ export async function dbGetBehavior(slug: string): Promise<BehaviorProfile | und
 /* ══════════════════════════════════════════════════════════════════ */
 
 export async function dbSearch(q: string): Promise<SearchResult[]> {
+  if (REST) {
+    try {
+      return await supabaseRest.search(q);
+    } catch {
+      /* lanjut */
+    }
+  }
   if (!db) return buildSearchIndex().filter((r) => !q || r.keywords.includes(q.toLowerCase()));
   try {
     const text = q.toLowerCase();
@@ -514,5 +615,13 @@ export async function dbSearch(q: string): Promise<SearchResult[]> {
 }
 
 /* Keterangan koneksi untuk /api/config */
-export const dbStatus = (): { connected: boolean; mode: "database" | "mock" } =>
-  DB ? { connected: true, mode: "database" } : { connected: false, mode: "mock" };
+export const dbStatus = (): { connected: boolean; mode: "database" | "mock" } => {
+  if (REST) return { connected: true, mode: "database" };
+  return DB ? { connected: true, mode: "database" } : { connected: false, mode: "mock" };
+};
+
+/* Uji koneksi Supabase REST (untuk /api/health) */
+export async function pingSupabaseRest(): Promise<boolean> {
+  if (!supabaseRestEnabled) return false;
+  return supabaseRest.ping();
+}

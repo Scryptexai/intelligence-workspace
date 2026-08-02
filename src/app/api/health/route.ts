@@ -1,16 +1,27 @@
 import { pingDatabaseVerbose, isDbConfigured, hadSslModeParam } from "@/db";
+import { pingSupabaseRest, dbStatus } from "@/db/dataService";
+const supabaseRestEnabled = dbStatus().mode === "database" && Boolean(process.env.SUPABASE_SECRET_KEY);
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/health
- * - Tanpa DATABASE_URL        → { ok:true, database:"mock" } (mode data riset lokal)
+ * - Supabase REST (cif_datasets) hidup → { ok:true, database:"supabase-rest" }
+ * - Tanpa DATABASE_URL        → { ok:true, database:"mock" }
  * - DB dikonfigurasi & hidup   → { ok:true, database:"connected" }
- * - DB dikonfigurasi tapi tak terjangkau → { ok:true, database:"unreachable", error }
- *   (aplikasi tetap jalan via fallback mock — tidak pernah crash). `error` adalah pesan
- *   asli dari driver pg (bukan connection string -- aman ditampilkan) untuk diagnosis.
+ * - lainnya                    → ok:true + fallback mock (tidak pernah crash)
  */
 export async function GET() {
+  if (supabaseRestEnabled) {
+    const restOk = await pingSupabaseRest();
+    if (restOk) {
+      return Response.json({
+        ok: true,
+        database: "supabase-rest",
+        note: "Data dari Supabase (tabel cif_datasets) via PostgREST.",
+      });
+    }
+  }
   if (!isDbConfigured()) {
     return Response.json({
       ok: true,
@@ -26,6 +37,6 @@ export async function GET() {
     error: result.error,
     errorSource: result.errorSource,
     hadSslModeParam: hadSslModeParam(),
-    note: "DATABASE_URL diset tapi tidak terjangkau — memakai fallback mock.",
+    note: "DB tidak terjangkau — memakai fallback mock.",
   });
 }
