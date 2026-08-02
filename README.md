@@ -215,40 +215,32 @@ vercel --prod
 ### 🗄️ Supabase / PostgreSQL (opsional — mode fullstack)
 
 Skema database lengkap sudah disiapkan di `src/db/schema.ts` (13 tabel relasional)
-dan migration SQL siap-merge di `drizzle/0000_*.sql`.
+dan migration SQL siap-merge di `drizzle/0000_*.sql`. **Proyek Supabase
+`uqtvjerhgvwoxiejvrli` sudah memiliki ke-13 tabel dengan kolom lengkap** (verified
+via PostgREST) — yang perlu dilakukan hanya mengisi data.
 
 **Cara tercepat (rekomendasi — tanpa koneksi DB langsung):**
 
 ```bash
-# 1. Buat project di Supabase → Settings → API, salin:
-#    NEXT_PUBLIC_SUPABASE_URL=https://<ref>.supabase.co
-#    SUPABASE_SECRET_KEY=sb_secret_...
-#    (simpan di .env.local — frontend otomatis mendeteksi, tidak perlu
-#     NEXT_PUBLIC_DATA_SOURCE=backend)
+# 1. .env.local
+NEXT_PUBLIC_SUPABASE_URL=https://uqtvjerhgvwoxiejvrli.supabase.co
+SUPABASE_SECRET_KEY=sb_secret_...
 
-# 2. Terapkan skema: tempel isi drizzle/0000_*.sql di Supabase SQL Editor → Run
-#    (atau: npx drizzle-kit push dengan DATABASE_URL)
+# 2. Isi data (otomatis, idempotent — skip jika sudah terisi)
+npm run seed:rest
 
-# 3. Isi data lengkap: tempel isi supabase/seed.sql di Supabase SQL Editor → Run
-#    (2 proyek · 22 knowledge · 41 evidence · 37 entities · 41 relasi ·
-#     30 events · 13 conflicts · QA & behavior — idempotent, aman diulang)
-
-# 4. Jalankan — header menampilkan badge "Supabase" (hijau) = data dari DB
+# 3. Jalankan — header menampilkan badge "Supabase" (hijau)
 npm run dev
 ```
 
-Alternatif dengan koneksi langsung (`DATABASE_URL`):
+**Alternatif seed (pilih satu):**
 
-```bash
-# 1. Set env
-#    DATABASE_URL=postgresql://postgres:postgres@db.xxxx.supabase.co:5432/postgres?sslmode=require
-
-# 2. Terapkan skema ke Supabase (buat semua tabel + index)
-npx drizzle-kit push
-
-# 3. Isi data awal (semua knowledge, entities, events, conflicts, QA, behavior)
-npx tsx src/db/seed.ts
-```
+| Cara | Perintah | Keterangan |
+|---|---|---|
+| CLI lokal | `npm run seed:rest` | REST (PostgREST), tanpa pg |
+| Bootstrap URL | `GET /api/seed` | Seed hanya jika tabel kosong (aman dipanggil berulang) |
+| GitHub Actions | push ke master | Aktifkan template `.github/workflows.example/supabase-seed.yml` → salin ke `.github/workflows/`, set repo secrets `SUPABASE_URL` + `SUPABASE_SECRET_KEY` |
+| SQL Editor | tempel `supabase/seed.sql` | Data lengkap (2 proyek · 22 knowledge · 41 evidence · 37 entities · 41 relasi · 30 events · 13 conflicts · QA & behavior) |
 
 **Regenerasi `supabase/seed.sql`** bila data riset mock berubah:
 
@@ -256,9 +248,22 @@ npx tsx src/db/seed.ts
 npx tsx scripts/build-seed-sql.ts
 ```
 
+**Deploy ke Vercel:** tambahkan di Vercel → Settings → Environment Variables:
+`NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SECRET_KEY` (dan opsional `DATABASE_URL`
+untuk `/api/health` hijau via pg). Tanpa env ini app berjalan di mock mode.
+
 **Tabel yang dibuat:** `projects`, `knowledge_items`, `evidence_items`, `entities`,
 `relationships`, `events`, `conflicts`, `qa_dimensions`, `qa_phases`,
 `behavior_profiles`, `notes`, `saved_views`, `users` — lengkap dengan FK & index.
+`notes` & `saved_views` persisten via Supabase (bukan in-memory) saat REST aktif.
+
+**Integrasi repo crypto-intelligence-framework (CIF):** data riset dari framework
+di-sync ke tabel yang sama via `tools/sync_supabase.py` di repo tersebut
+(`SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` — dapat menggunakan key yang sama).
+Data CIF memakai ID berbeda (`arbitrum-K-001`) sehingga tidak bentrok dengan seed
+aplikasi. Catatan: tabel `cif_patterns`/`cif_backtests`/`cif_decision_events`
+belum ada di proyek ini — jalankan SQL pembuatannya (lihat `docs/CIF_SYNC.md`)
+sebelum sync framework.
 
 > Prioritas sumber data server: **Supabase REST → pg (`DATABASE_URL`) → mock**.
 > Tanpa env apa pun, aplikasi jalan penuh di mock mode (badge header "Mock data").

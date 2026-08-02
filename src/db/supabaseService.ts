@@ -21,6 +21,7 @@ import type { KnowledgeItem } from "@/lib/types/knowledge";
 import type { Entity, Relationship } from "@/lib/types/entity";
 import type { TimelineEvent } from "@/lib/types/event";
 import type { Conflict } from "@/lib/types/conflict";
+import type { SavedView } from "@/lib/types/view";
 import type { SearchResult } from "@/lib/data";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
@@ -38,7 +39,10 @@ async function getRows<T>(path: string): Promise<T[]> {
       apikey: SECRET_KEY!,
       Authorization: `Bearer ${SECRET_KEY!}`,
     },
-    next: { revalidate: 30 },
+    // no-store: hindari Data Cache Next.js — data bisa berubah via /api/seed
+    // atau pipeline CIF; cache stale (mis. [] sebelum seed) bikin UI kosong
+    // hingga 30 detik. Layer di atas (s-maxage header) tetap mengatur cache CDN.
+    cache: "no-store",
   });
   if (!res.ok) throw new Error(`Supabase REST ${res.status}: ${path}`);
   return (await res.json()) as T[];
@@ -505,5 +509,81 @@ export const supabaseRest = {
     } catch {
       return false;
     }
+  },
+
+  /* ------------------------------------------------------------------ */
+  /* Notes (tabel `notes`) — persisten via Supabase                      */
+  /* ------------------------------------------------------------------ */
+
+  async getNote(scope: string, id: string): Promise<string> {
+    const rows = await getRows<{ text: string }>(
+      `notes?scope=eq.${encodeURIComponent(scope)}&ref_id=eq.${encodeURIComponent(id)}&select=text`
+    );
+    return rows[0]?.text ?? "";
+  },
+
+  async saveNote(scope: string, id: string, text: string): Promise<void> {
+    const noteId = `note-${scope}-${id}`;
+    if (!text.trim()) {
+      await fetch(`${SUPABASE_URL}/rest/v1/notes?id=eq.${encodeURIComponent(noteId)}`, {
+        method: "DELETE",
+        headers: { apikey: SECRET_KEY!, Authorization: `Bearer ${SECRET_KEY!}` },
+      });
+      return;
+    }
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/notes?on_conflict=id`, {
+      method: "POST",
+      headers: {
+        apikey: SECRET_KEY!,
+        Authorization: `Bearer ${SECRET_KEY!}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify([
+        { id: noteId, scope, ref_id: id, text, updated_at: new Date().toISOString() },
+      ]),
+    });
+    if (!res.ok && res.status !== 201) {
+      throw new Error(`saveNote gagal: HTTP ${res.status}`);
+    }
+  },
+
+  /* ------------------------------------------------------------------ */
+  /* Saved views (tabel `saved_views`) — persisten via Supabase          */
+  /* ------------------------------------------------------------------ */
+
+  async listViews(scope: string): Promise<SavedView[]> {
+    const rows = await getRows<SavedView>(
+      `saved_views?scope=eq.${encodeURIComponent(scope)}&select=*&order=created_at`
+    );
+    return rows;
+  },
+
+  async upsertView(view: SavedView): Promise<SavedView[]> {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/saved_views?on_conflict=id`, {
+      method: "POST",
+      headers: {
+        apikey: SECRET_KEY!,
+        Authorization: `Bearer ${SECRET_KEY!}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify([view]),
+    });
+    if (!res.ok && res.status !== 201) {
+      throw new Error(`upsertView gagal: HTTP ${res.status}`);
+    }
+    return this.listViews(view.scope);
+  },
+
+  async deleteView(id: string, scope: string): Promise<SavedView[]> {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/saved_views?id=eq.${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: { apikey: SECRET_KEY!, Authorization: `Bearer ${SECRET_KEY!}` },
+    });
+    if (!res.ok && res.status !== 204) {
+      throw new Error(`deleteView gagal: HTTP ${res.status}`);
+    }
+    return this.listViews(scope);
   },
 };

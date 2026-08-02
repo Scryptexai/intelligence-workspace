@@ -28,7 +28,7 @@ export class ApiError extends Error {
 /** Metadata respons — dipakai backend untuk memberi tahu sinkronisasi data. */
 export interface ApiMeta {
   generatedAt: string;
-  source: "live" | "degraded" | "stale" | "mock";
+  source: "live" | "degraded" | "stale" | "mock" | "supabase-rest";
   cached?: boolean;
   /** Etag/version untuk deteksi konflik & revalidation */
   version?: string;

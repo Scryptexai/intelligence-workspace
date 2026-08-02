@@ -1,3 +1,4 @@
+import { supabaseRest, supabaseRestEnabled } from "@/db/supabaseService";
 import { deleteView } from "../store";
 import { apiJson } from "@/lib/api/response";
 
@@ -9,5 +10,9 @@ export async function DELETE(
   const { id } = await params;
   const { searchParams } = new URL(req.url);
   const scope = searchParams.get("scope") ?? "";
+  if (supabaseRestEnabled) {
+    const views = await supabaseRest.deleteView(id, scope);
+    return apiJson(views, { source: "supabase-rest" });
+  }
   return apiJson(deleteView(id, scope), { source: "mock" });
 }
