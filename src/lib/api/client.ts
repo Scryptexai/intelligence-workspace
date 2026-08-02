@@ -9,7 +9,7 @@
  *  - Correlation ID (x-request-id) untuk tracing di sisi backend.
  */
 
-import { API_BASE_URL, getAuthToken, REQUEST_TIMEOUT_MS } from "./config";
+import { API_BASE_URL, getAuthToken, REQUEST_TIMEOUT_MS, isServerSide, serverApiBaseUrl } from "./config";
 import { ApiError, type ApiErrorBody, type ApiMeta, type ListParams } from "./types";
 
 export interface RequestOptions extends Omit<RequestInit, "body"> {
@@ -44,7 +44,9 @@ export function buildQuery(
 }
 
 function buildUrl(path: string, query?: ListParams | Record<string, unknown>): string {
-  const base = API_BASE_URL;
+  // Node's fetch (used during SSR) can't resolve a bare relative path like "/api/projects" --
+  // it needs an absolute URL, unlike the browser which resolves relative to its own origin.
+  const base = isServerSide ? serverApiBaseUrl() : API_BASE_URL;
   const url = /^https?:\/\//.test(path) ? path : `${base}${path.startsWith("/") ? path : `/${path}`}`;
   const qs = buildQuery(query as ListParams);
   return `${url}${qs}`;
@@ -152,8 +154,11 @@ export async function apiGet<T>(
   path: string,
   query?: ListParams
 ): Promise<ApiResult<T>> {
-  const url = buildUrl(path, query);
-  return apiFetch<T>(url, { method: "GET" });
+  // Only append the query string here -- apiFetch() calls buildUrl() itself, which already
+  // prepends the base. Doing both here AND in apiFetch doubled the base (bug found live:
+  // "/api/api/projects", 2026-08-02 -- surfaced only once NEXT_PUBLIC_DATA_SOURCE=backend
+  // was ever actually exercised, since MOCK mode never reached this code path before).
+  return apiFetch<T>(`${path}${buildQuery(query)}`, { method: "GET" });
 }
 
 /* Convenience methods — semua mengembalikan data yang sudah di-unwrap. */
