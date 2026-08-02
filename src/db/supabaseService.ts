@@ -1,21 +1,20 @@
 /**
  * ─────────────────────────────────────────────────────────────────────────────
- * SUPABASE REST DATA SERVICE
+ * SUPABASE REST DATA SERVICE (v2 — relational tables)
  * ─────────────────────────────────────────────────────────────────────────────
- * Membaca database Supabase melalui PostgREST (HTTPS) dari tabel GENERIC
- * `cif_datasets` — format yang dipakai oleh database Anda:
+ * Membaca database Supabase via PostgREST (HTTPS) dari TABEL RELASIONAL
+ * (schema Drizzle di src/db/schema.ts) — yang diisi oleh pipeline CIF
+ * (crypto-intelligence-framework tools/sync_supabase.py) atau seed:
  *
- *   cif_datasets(project_slug, kind, payload jsonb)
+ *   projects, knowledge_items, evidence_items, entities, relationships,
+ *   events, conflicts, qa_dimensions, qa_phases, behavior_profiles, notes,
+ *   saved_views, users
  *
- *   kind: "project" | "knowledge" | "entities" | "events" | "conflicts"
- *   plus `__index__` berisi: kind="projects" (daftar proyek),
- *                            kind="relationships" (daftar edge graph)
+ * Mengapa REST (bukan pg langsung): host DB direct Supabase sering IPv6-only,
+ * tidak terjangkau dari serverless/Vercel/sandbox IPv4. PostgREST HTTPS bekerja
+ * di mana saja. Secret key dipakai server-side (bypass RLS untuk read).
  *
- * Alasan REST (bukan pg langsung): host DB direct Supabase sering IPv6-only
- * (tidak terjangkau dari serverless/Vercel/sandbox IPv4). PostgREST HTTPS
- * bekerja di mana saja, dan secret key dipakai server-side untuk bypass RLS.
- *
- * Seluruh hasil dipetakan ke tipe aplikasi (src/lib/types/*).
+ * Semua hasil dipetakan dari kolom snake_case → tipe aplikasi (src/lib/types/*).
  */
 import type { Project, QAReport, BehaviorProfile } from "@/lib/types/project";
 import type { KnowledgeItem } from "@/lib/types/knowledge";
@@ -33,192 +32,237 @@ export const supabaseRestEnabled = Boolean(SUPABASE_URL && SECRET_KEY);
 /* HTTP helper                                                         */
 /* ------------------------------------------------------------------ */
 
-async function getTable<T>(path: string): Promise<T> {
+async function getRows<T>(path: string): Promise<T[]> {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     headers: {
       apikey: SECRET_KEY!,
       Authorization: `Bearer ${SECRET_KEY!}`,
     },
-    next: { revalidate: 60 },
-    cache: "no-store",
+    next: { revalidate: 30 },
   });
   if (!res.ok) throw new Error(`Supabase REST ${res.status}: ${path}`);
-  return (await res.json()) as T;
+  return (await res.json()) as T[];
 }
 
-/** Ambil payload dari satu baris cif_datasets. */
-async function fetchKind(projectSlug: string, kind: string): Promise<unknown> {
-  const rows = await getTable<{ payload: unknown }[]>(
-    `cif_datasets?project_slug=eq.${encodeURIComponent(projectSlug)}&kind=eq.${encodeURIComponent(kind)}&select=payload&limit=1`
-  );
-  return rows[0]?.payload;
+async function getOne<T>(path: string): Promise<T | undefined> {
+  const rows = await getRows<T>(path);
+  return rows[0];
 }
 
 /* ------------------------------------------------------------------ */
-/* Mapper: project                                                     */
+/* Mapper: project (projects + qa_dimensions + qa_phases + behavior)   */
 /* ------------------------------------------------------------------ */
-
-interface RawQaItem { name: string; value: number; weight: number }
-interface RawPhase { phase: string; status: string; progress: number }
 
 interface RawProject {
   id: string;
+  slug: string;
   name: string;
   symbol: string;
-  description: string;
-  category?: string;
-  cifScore: number;
+  tagline: string | null;
+  description: string | null;
+  color: string | null;
+  accent: string | null;
+  status: string | null;
+  cif_score: number;
   confidence: number;
+  knowledge_count: number;
+  conflict_count: number;
   coverage: number;
-  entityCount: number;
-  eventCount: number;
-  knowledgeCount: number;
-  conflictCount: number;
-  lastUpdated?: string;
-  accentFrom?: string;
-  accentTo?: string;
-  accentSolid?: string;
-  qa?: RawQaItem[];
-  phases?: RawPhase[];
-  behavior?: Record<string, unknown>;
-  trends?: Record<string, { data: number[]; delta: number }>;
+  entity_count: number;
+  event_count: number;
+  last_updated: string | null;
+  last_activity_hours: number;
+  tags: string[] | null;
 }
 
-function mapProject(p: RawProject): Project {
+interface RawQaDim {
+  key: string;
+  label: string;
+  score: number;
+  weight: number;
+  description: string | null;
+  sort_order: number;
+}
+interface RawQaPhase { name: string; status: string; score: number; owner: string | null; sort_order: number }
+interface RawBehavior {
+  strategic_objectives: string[];
+  decision_patterns: string[];
+  risk_response: string[];
+  trade_offs: string[];
+}
+
+const QA_KEY_MAP: Record<string, string> = {
+  research: "research",
+  consistency: "consistency",
+  evidence: "evidence",
+  coverage: "coverage",
+  conflict: "conflict",
+  knowledge: "knowledge",
+};
+
+async function buildProject(p: RawProject): Promise<Project> {
+  const slug = p.slug;
+  const [dims, phases, behavior] = await Promise.all([
+    getRows<RawQaDim>(`qa_dimensions?project_slug=eq.${slug}&select=*&order=sort_order`).catch(() => []),
+    getRows<RawQaPhase>(`qa_phases?project_slug=eq.${slug}&select=*&order=sort_order`).catch(() => []),
+    getOne<RawBehavior>(`behavior_profiles?project_slug=eq.${slug}&select=*`).catch(() => undefined),
+  ]);
+
   const qa: QAReport = {
-    total: p.cifScore,
-    dimensions: (p.qa ?? []).map((d, i) => ({
-      key: (d.name.toLowerCase().replace(/[^a-z]+/g, "") || `dim-${i}`) as QAReport["dimensions"][number]["key"],
-      label: d.name,
-      score: d.value,
-      weight: Math.round((d.weight ?? 0) * 100),
-      description: "",
+    total: p.cif_score,
+    dimensions: dims.map((d) => ({
+      key: (QA_KEY_MAP[d.key] ?? d.key) as QAReport["dimensions"][number]["key"],
+      label: d.label,
+      score: d.score,
+      weight: d.weight,
+      description: d.description ?? "",
     })),
-    phases: (p.phases ?? []).map((ph) => ({
-      name: ph.phase,
-      status: (ph.status ?? "Pending") as QAReport["phases"][number]["status"],
-      score: ph.progress ?? 0,
-      owner: "",
+    phases: phases.map((ph) => ({
+      name: ph.name,
+      status: (ph.status ?? "Not Started") as QAReport["phases"][number]["status"],
+      score: ph.score,
+      owner: ph.owner ?? "",
     })),
   };
 
-  const behavior: BehaviorProfile = {
-    strategicObjectives: (p.behavior?.strategicObjectives as string[]) ?? [],
-    decisionPatterns: (p.behavior?.decisionPatterns as string[]) ?? [],
-    riskResponse: (p.behavior?.riskResponse as string[]) ?? [],
-    tradeOffs: (p.behavior?.tradeOffs as string[]) ?? [],
-  };
+  const behaviorProfile: BehaviorProfile = behavior
+    ? {
+        strategicObjectives: behavior.strategic_objectives ?? [],
+        decisionPatterns: behavior.decision_patterns ?? [],
+        riskResponse: behavior.risk_response ?? [],
+        tradeOffs: behavior.trade_offs ?? [],
+      }
+    : { strategicObjectives: [], decisionPatterns: [], riskResponse: [], tradeOffs: [] };
 
   return {
     id: p.id,
-    slug: p.id,
+    slug: p.slug,
     name: p.name,
     symbol: p.symbol,
-    tagline: p.category ?? "",
+    tagline: p.tagline ?? "",
     description: p.description ?? "",
-    color: p.accentFrom ?? "#22d3ee",
-    accent: p.accentTo ?? "#0e7490",
-    status: "active",
-    cifScore: p.cifScore ?? 0,
-    confidence: p.confidence ?? 0,
-    knowledgeCount: p.knowledgeCount ?? 0,
-    conflictCount: p.conflictCount ?? 0,
-    coverage: p.coverage ?? 0,
-    entityCount: p.entityCount ?? 0,
-    eventCount: p.eventCount ?? 0,
-    lastUpdated: p.lastUpdated ?? "",
-    lastActivityHours: 0,
-    tags: [],
+    color: p.color ?? "#22d3ee",
+    accent: p.accent ?? "#0e7490",
+    status: (p.status as Project["status"]) ?? "active",
+    cifScore: p.cif_score,
+    confidence: p.confidence,
+    knowledgeCount: p.knowledge_count,
+    conflictCount: p.conflict_count,
+    coverage: p.coverage,
+    entityCount: p.entity_count,
+    eventCount: p.event_count,
+    lastUpdated: p.last_updated ?? "",
+    lastActivityHours: p.last_activity_hours,
+    tags: p.tags ?? [],
     qa,
-    behavior,
+    behavior: behaviorProfile,
   };
 }
 
 /* ------------------------------------------------------------------ */
-/* Mapper: knowledge                                                   */
+/* Mapper: knowledge (+ evidence)                                      */
 /* ------------------------------------------------------------------ */
-
-interface RawEvidence {
-  date?: string;
-  source?: string;
-  weight?: number;
-  eventId?: string;
-  excerpt?: string;
-  eventName?: string;
-  sourceUrl?: string;
-}
 
 interface RawKnowledge {
   id: string;
+  project_slug: string;
   name: string;
-  status?: string;
-  category?: string;
-  confidence?: number;
-  description?: string;
-  updatedAt?: string;
-  dependencies?: string[];
-  relatedKnowledge?: string[];
-  projectId: string;
-  evidence?: RawEvidence[];
+  category: string | null;
+  description: string | null;
+  confidence: number;
+  status: string | null;
+  updated_at: string | null;
+  author: string | null;
+  related_knowledge: string[] | null;
+  dependencies: string[] | null;
 }
 
-function mapKnowledge(k: RawKnowledge): KnowledgeItem {
+interface RawEvidence {
+  id: string;
+  knowledge_id: string;
+  event_id: string | null;
+  event_name: string;
+  date: string | null;
+  source: string | null;
+  url: string | null;
+  weight: number;
+  note: string | null;
+  sort_order: number;
+}
+
+async function listEvidenceMap(): Promise<Map<string, RawEvidence[]>> {
+  const rows = await getRows<RawEvidence>(`evidence_items?select=*&order=sort_order`).catch(() => []);
+  const map = new Map<string, RawEvidence[]>();
+  for (const e of rows) {
+    if (!map.has(e.knowledge_id)) map.set(e.knowledge_id, []);
+    map.get(e.knowledge_id)!.push(e);
+  }
+  return map;
+}
+
+function mapKnowledge(k: RawKnowledge, evs: RawEvidence[]): KnowledgeItem {
   return {
     id: k.id,
-    projectSlug: k.projectId,
+    projectSlug: k.project_slug,
     name: k.name,
     category: k.category ?? "",
     description: k.description ?? "",
-    confidence: k.confidence ?? 0,
+    confidence: k.confidence,
     status: (k.status as KnowledgeItem["status"]) ?? "Stable",
-    updatedAt: k.updatedAt ?? "",
-    author: "",
-    evidence: (k.evidence ?? []).map((e, i) => ({
-      id: `ev-${k.id}-${i + 1}`,
-      eventId: e.eventId ?? "",
-      eventName: e.eventName ?? "",
+    updatedAt: k.updated_at ?? "",
+    author: k.author ?? "",
+    evidence: evs.map((e) => ({
+      id: e.id,
+      eventId: e.event_id ?? "",
+      eventName: e.event_name,
       date: e.date ?? "",
       source: e.source ?? "",
-      url: e.sourceUrl ?? "#",
-      weight: e.weight ?? 1,
-      note: e.excerpt,
+      url: e.url ?? "#",
+      weight: e.weight,
+      note: e.note ?? undefined,
     })),
-    relatedKnowledge: k.relatedKnowledge ?? [],
+    relatedKnowledge: k.related_knowledge ?? [],
     dependencies: k.dependencies ?? [],
   };
 }
 
 /* ------------------------------------------------------------------ */
-/* Mapper: entity                                                      */
+/* Mapper: entity / relationship                                       */
 /* ------------------------------------------------------------------ */
 
 interface RawEntity {
   id: string;
+  project_slug: string;
   name: string;
   type: string;
-  status?: string;
-  description?: string;
-  relatedEvents?: string[];
-  relatedKnowledge?: string[];
-  projectId: string;
-  x?: number;
-  y?: number;
-  founded?: string;
-  metadata?: Record<string, string>;
+  status: string | null;
+  description: string | null;
+  founded: string | null;
+  related_knowledge: string[] | null;
+  related_events: string[] | null;
+  metadata: Record<string, string> | null;
+}
+
+interface RawRelationship {
+  id: string;
+  project_slug: string;
+  source: string;
+  target: string;
+  type: string;
 }
 
 function mapEntity(e: RawEntity): Entity {
   return {
     id: e.id,
-    projectSlug: e.projectId,
+    projectSlug: e.project_slug,
     name: e.name,
     type: (e.type as Entity["type"]) ?? "Company",
     status: (e.status as Entity["status"]) ?? "Unknown",
     description: e.description ?? "",
-    founded: e.founded,
-    relatedKnowledge: e.relatedKnowledge ?? [],
-    relatedEvents: e.relatedEvents ?? [],
-    metadata: { ...(e.metadata ?? {}), x: String(e.x ?? 0), y: String(e.y ?? 0) },
+    founded: e.founded ?? undefined,
+    relatedKnowledge: e.related_knowledge ?? [],
+    relatedEvents: e.related_events ?? [],
+    metadata: e.metadata ?? {},
   };
 }
 
@@ -228,23 +272,23 @@ function mapEntity(e: RawEntity): Entity {
 
 interface RawEvent {
   id: string;
+  project_slug: string;
   name: string;
-  date?: string;
+  date: string | null;
   type: string;
-  description?: string;
-  result?: string;
-  source?: string;
-  sourceUrl?: string;
-  participants?: string[];
-  affectedKnowledge?: string[];
-  projectId: string;
-  impact?: string;
+  participants: string[] | null;
+  description: string | null;
+  result: string | null;
+  source: string | null;
+  url: string | null;
+  affected_knowledge: string[] | null;
+  impact: string | null;
 }
 
 function mapEvent(ev: RawEvent): TimelineEvent {
   return {
     id: ev.id,
-    projectSlug: ev.projectId,
+    projectSlug: ev.project_slug,
     name: ev.name,
     date: ev.date ?? "",
     type: (ev.type as TimelineEvent["type"]) ?? "Launch",
@@ -252,8 +296,8 @@ function mapEvent(ev: RawEvent): TimelineEvent {
     description: ev.description ?? "",
     result: ev.result ?? "",
     source: ev.source ?? "",
-    url: ev.sourceUrl ?? undefined,
-    affectedKnowledge: ev.affectedKnowledge ?? [],
+    url: ev.url ?? undefined,
+    affectedKnowledge: ev.affected_knowledge ?? [],
     impact: (ev.impact as TimelineEvent["impact"]) ?? "Medium",
   };
 }
@@ -262,73 +306,40 @@ function mapEvent(ev: RawEvent): TimelineEvent {
 /* Mapper: conflict                                                    */
 /* ------------------------------------------------------------------ */
 
-interface RawVersion {
-  url?: string;
-  date?: string;
-  value: string;
-  source: string;
-  evidence?: string;
-  reliability?: string;
-}
-
 interface RawConflict {
   id: string;
-  status?: string;
-  category?: string;
-  severity?: string;
-  versionA: RawVersion;
-  versionB: RawVersion;
-  projectId: string;
-  resolution?: string;
-  description?: string;
-  affectedPhase?: string;
-  affectedKnowledge?: string[];
+  project_slug: string;
+  category: string | null;
+  title: string;
+  description: string | null;
+  severity: string | null;
+  status: string | null;
+  version_a: { source: string; value: string; date: string; url: string; evidence: string } | null;
+  version_b: { source: string; value: string; date: string; url: string; evidence: string } | null;
+  resolution: string | null;
+  affected_knowledge: string[] | null;
+  affected_phase: string | null;
+  updated_at: string | null;
 }
 
 function mapConflict(c: RawConflict): Conflict {
+  const vA = c.version_a ?? { source: "Version A", value: "", date: "", url: "#", evidence: "" };
+  const vB = c.version_b ?? { source: "Version B", value: "", date: "", url: "#", evidence: "" };
   return {
     id: c.id,
-    projectSlug: c.projectId,
+    projectSlug: c.project_slug,
     category: (c.category as Conflict["category"]) ?? "Data",
-    title: c.description ?? `Conflict ${c.id}`,
-    description:
-      `${c.versionA?.source ?? "A"}: ${c.versionA?.value ?? "…"} — vs — ${c.versionB?.source ?? "B"}: ${c.versionB?.value ?? "…"}`,
+    title: c.title,
+    description: c.description ?? "",
     severity: (c.severity as Conflict["severity"]) ?? "Medium",
     status: (c.status as Conflict["status"]) ?? "Unresolved",
-    versionA: {
-      source: c.versionA?.source ?? "Version A",
-      value: c.versionA?.value ?? "",
-      date: c.versionA?.date ?? "",
-      url: c.versionA?.url ?? "#",
-      evidence: c.versionA?.evidence ?? "",
-    },
-    versionB: {
-      source: c.versionB?.source ?? "Version B",
-      value: c.versionB?.value ?? "",
-      date: c.versionB?.date ?? "",
-      url: c.versionB?.url ?? "#",
-      evidence: c.versionB?.evidence ?? "",
-    },
+    versionA: vA,
+    versionB: vB,
     resolution: c.resolution ?? undefined,
-    affectedKnowledge: c.affectedKnowledge ?? [],
-    affectedPhase: c.affectedPhase ?? "",
-    updatedAt: "",
+    affectedKnowledge: c.affected_knowledge ?? [],
+    affectedPhase: c.affected_phase ?? "",
+    updatedAt: c.updated_at ?? "",
   };
-}
-
-/* ------------------------------------------------------------------ */
-/* Mapper: relationship                                                */
-/* ------------------------------------------------------------------ */
-
-interface RawRelationship {
-  id: string;
-  type: string;
-  source: string;
-  target: string;
-}
-
-function mapRelationship(r: RawRelationship): Relationship {
-  return { id: r.id, source: r.source, target: r.target, type: r.type as Relationship["type"] };
 }
 
 /* ------------------------------------------------------------------ */
@@ -337,61 +348,82 @@ function mapRelationship(r: RawRelationship): Relationship {
 
 export const supabaseRest = {
   async listProjects(): Promise<Project[]> {
-    const payload = (await fetchKind("__index__", "projects")) as RawProject[] | null;
-    if (!Array.isArray(payload)) return [];
-    return payload.map(mapProject);
+    const rows = await getRows<RawProject>(`projects?select=*`);
+    const out: Project[] = [];
+    for (const p of rows) out.push(await buildProject(p));
+    return out;
   },
 
   async getProject(slug: string): Promise<Project | undefined> {
-    const payload = (await fetchKind(slug, "project")) as RawProject | null;
-    if (!payload || typeof payload !== "object") return undefined;
-    return mapProject(payload);
+    const row = await getOne<RawProject>(`projects?slug=eq.${encodeURIComponent(slug)}&select=*`);
+    if (!row) return undefined;
+    return buildProject(row);
   },
 
   async listKnowledge(slug: string): Promise<KnowledgeItem[]> {
-    const payload = (await fetchKind(slug, "knowledge")) as RawKnowledge[] | null;
-    if (!Array.isArray(payload)) return [];
-    return payload.map(mapKnowledge);
+    const rows = await getRows<RawKnowledge>(
+      `knowledge_items?project_slug=eq.${encodeURIComponent(slug)}&select=*`
+    );
+    const evMap = await listEvidenceMap();
+    return rows.map((k) => mapKnowledge(k, evMap.get(k.id) ?? []));
   },
 
   async getKnowledgeItem(slug: string, id: string): Promise<KnowledgeItem | undefined> {
-    const items = await this.listKnowledge(slug);
-    return items.find((k) => k.id === id);
+    const row = await getOne<RawKnowledge>(
+      `knowledge_items?id=eq.${encodeURIComponent(id)}&project_slug=eq.${encodeURIComponent(slug)}&select=*`
+    );
+    if (!row) return undefined;
+    const evs = await getRows<RawEvidence>(
+      `evidence_items?knowledge_id=eq.${encodeURIComponent(id)}&select=*&order=sort_order`
+    );
+    return mapKnowledge(row, evs);
   },
 
   async listEntities(slug: string): Promise<Entity[]> {
-    const payload = (await fetchKind(slug, "entities")) as RawEntity[] | null;
-    if (!Array.isArray(payload)) return [];
-    return payload.map(mapEntity);
+    const rows = await getRows<RawEntity>(
+      `entities?project_slug=eq.${encodeURIComponent(slug)}&select=*`
+    );
+    return rows.map(mapEntity);
   },
 
   async getEntity(slug: string, id: string): Promise<Entity | undefined> {
-    const items = await this.listEntities(slug);
-    return items.find((e) => e.id === id);
+    const row = await getOne<RawEntity>(
+      `entities?id=eq.${encodeURIComponent(id)}&project_slug=eq.${encodeURIComponent(slug)}&select=*`
+    );
+    return row ? mapEntity(row) : undefined;
   },
 
   async listRelationships(slug: string): Promise<Relationship[]> {
-    // relationships disimpan sekali di __index__
-    const payload = (await fetchKind("__index__", "relationships")) as RawRelationship[] | null;
-    if (!Array.isArray(payload)) return [];
-    return payload.map(mapRelationship);
+    const rows = await getRows<RawRelationship>(
+      `relationships?project_slug=eq.${encodeURIComponent(slug)}&select=*`
+    );
+    return rows.map((r) => ({
+      id: r.id,
+      source: r.source,
+      target: r.target,
+      type: r.type as Relationship["type"],
+    }));
   },
 
   async listEvents(slug: string): Promise<TimelineEvent[]> {
-    const payload = (await fetchKind(slug, "events")) as RawEvent[] | null;
-    if (!Array.isArray(payload)) return [];
-    return payload.map(mapEvent);
+    const rows = await getRows<RawEvent>(
+      `events?project_slug=eq.${encodeURIComponent(slug)}&select=*`
+    );
+    return rows.map(mapEvent);
   },
 
   async listConflicts(slug: string): Promise<Conflict[]> {
-    const payload = (await fetchKind(slug, "conflicts")) as RawConflict[] | null;
-    if (!Array.isArray(payload)) return [];
-    return payload.map(mapConflict);
+    const rows = await getRows<RawConflict>(
+      `conflicts?project_slug=eq.${encodeURIComponent(slug)}&select=*`
+    );
+    return rows.map(mapConflict);
   },
 
   async getConflict(slug: string, id: string): Promise<Conflict | undefined> {
-    const items = await this.listConflicts(slug);
-    return items.find((c) => c.id === id);
+    const row = await getOne<RawConflict>(
+      `conflicts?id=eq.${encodeURIComponent(id)}&project_slug=eq.${encodeURIComponent(slug)}&select=*`
+    );
+    return row ? mapConflict(row) : undefined;
   },
 
   async search(q: string): Promise<SearchResult[]> {
@@ -400,7 +432,8 @@ export const supabaseRest = {
     const push = (r: SearchResult) => {
       if (!text || r.keywords.includes(text) || r.label.toLowerCase().includes(text)) results.push(r);
     };
-    const projects = await this.listProjects();
+
+    const projects = await this.listProjects().catch(() => [] as Project[]);
     for (const p of projects) {
       push({
         category: "Project",
@@ -434,9 +467,40 @@ export const supabaseRest = {
     return results.slice(0, 40);
   },
 
+  /** Uji koneksi: query tabel `projects`. */
   async ping(): Promise<boolean> {
     try {
-      await getTable<unknown[]>("cif_datasets?select=id&limit=1");
+      await getRows<{ id: string }>("projects?select=id&limit=1");
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  /** Test akses write (dipakai /api/config atau tooling). */
+  async pingWrite(): Promise<boolean> {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/notes`, {
+        method: "POST",
+        headers: {
+          apikey: SECRET_KEY!,
+          Authorization: `Bearer ${SECRET_KEY!}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+        },
+        body: JSON.stringify({
+          id: `ping-${Date.now()}`,
+          scope: "__ping__",
+          ref_id: "__ping__",
+          text: "ping",
+        }),
+      });
+      if (!res.ok && res.status !== 201) return false;
+      // cleanup
+      await fetch(`${SUPABASE_URL}/rest/v1/notes?scope=eq.__ping__`, {
+        method: "DELETE",
+        headers: { apikey: SECRET_KEY!, Authorization: `Bearer ${SECRET_KEY!}` },
+      });
       return true;
     } catch {
       return false;

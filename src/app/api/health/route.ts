@@ -1,5 +1,6 @@
 import { pingDatabaseVerbose, isDbConfigured, hadSslModeParam } from "@/db";
 import { pingSupabaseRest, dbStatus } from "@/db/dataService";
+import { supabaseRest } from "@/db/supabaseService";
 const supabaseRestEnabled = dbStatus().mode === "database" && Boolean(process.env.SUPABASE_SECRET_KEY);
 
 export const dynamic = "force-dynamic";
@@ -15,10 +16,12 @@ export async function GET() {
   if (supabaseRestEnabled) {
     const restOk = await pingSupabaseRest();
     if (restOk) {
+      const writeOk = await supabaseRest.pingWrite();
       return Response.json({
         ok: true,
         database: "supabase-rest",
-        note: "Data dari Supabase (tabel cif_datasets) via PostgREST.",
+        write: writeOk ? "enabled" : "readonly",
+        note: "Data dari Supabase (tabel relasional) via PostgREST.",
       });
     }
   }
