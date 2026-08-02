@@ -44,13 +44,26 @@ export async function pingDatabase(): Promise<boolean> {
 }
 
 /** Sama seperti pingDatabase(), tapi menyertakan pesan error asli untuk diagnosis. */
-export async function pingDatabaseVerbose(): Promise<{ ok: boolean; error?: string }> {
+export async function pingDatabaseVerbose(): Promise<{ ok: boolean; error?: string; errorSource?: string }> {
   if (!db || !pool) return { ok: false, error: "pool not initialized" };
   try {
     await pool.query("select 1");
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    const asRecord = err as Record<string, unknown>;
+    // Distinguishes a client-side Node TLS rejection (has `.code` like
+    // SELF_SIGNED_CERT_IN_CHAIN, no `.severity`) from a Postgres wire-protocol
+    // ErrorResponse relayed by Supavisor itself (has `.severity`/`.routine`) --
+    // the fix differs completely depending on which side is actually failing.
+    const errorSource =
+      typeof asRecord?.severity === "string" || typeof asRecord?.routine === "string"
+        ? `server (pg code=${String(asRecord.code)}, severity=${String(asRecord.severity)}, routine=${String(asRecord.routine)})`
+        : `client (code=${String(asRecord?.code)})`;
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+      errorSource,
+    };
   }
 }
 

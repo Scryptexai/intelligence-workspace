@@ -24,6 +24,7 @@ export async function GET() {
     ok: true,
     database: "unreachable",
     error: result.error,
+    errorSource: result.errorSource,
     note: "DATABASE_URL diset tapi tidak terjangkau — memakai fallback mock.",
   });
 }
