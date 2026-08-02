@@ -59,7 +59,13 @@ export const isServerSide = typeof window === "undefined";
  */
 export function serverApiBaseUrl(): string {
   const configured = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (configured) return configured.replace(/\/$/, "");
+  // Pastikan hasilnya SELALU URL absolut — fetch server tidak bisa
+  // menyelesaikan path relatif seperti "/api" (Invalid URL).
+  if (configured) {
+    const clean = configured.replace(/\/$/, "");
+    if (/^https?:\/\//.test(clean)) return clean;
+    // fallback: nilai relatif ("/api") → gunakan origin lokal/produksi.
+  }
   // VERCEL_URL is the ephemeral per-deployment hostname (e.g. intelligence-workspace-cf2pr...
   // .vercel.app) -- it's still behind this project's Vercel Authentication wall, so an SSR
   // self-fetch against it gets redirected to an HTML login page instead of JSON (confirmed

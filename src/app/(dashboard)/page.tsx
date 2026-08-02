@@ -10,7 +10,7 @@ import {
   Sparkles,
   TrendingUp,
 } from "lucide-react";
-import { projectRepository, eventRepository, conflictRepository } from "@/lib/api";
+import { projectRepository, eventRepository, conflictRepository } from "@/lib/api/repositoriesServer";
 import type { Project } from "@/lib/types/project";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -92,6 +92,8 @@ async function buildActivityFeed(projects: Project[]): Promise<FeedItem[]> {
 }
 
 /* ------------------------------------------------------------------ */
+
+export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const projects = await projectRepository.list();

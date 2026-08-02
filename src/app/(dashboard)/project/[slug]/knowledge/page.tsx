@@ -1,12 +1,14 @@
 import { notFound } from "next/navigation";
 import { BookOpen } from "lucide-react";
-import { projectRepository, knowledgeRepository } from "@/lib/api";
+import { projectRepository, knowledgeRepository } from "@/lib/api/repositoriesServer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { KnowledgeListWithSync } from "@/components/knowledge/KnowledgeListWithSync";
 import { ViewManager } from "@/components/layout/ViewManager";
 import { Badge } from "@/components/ui/badge";
 
 const VALID_STATUS = ["All", "Stable", "Emerging", "Volatile", "Deprecated"] as const;
+
+export const dynamic = "force-dynamic";
 
 export default async function KnowledgePage({
   params,

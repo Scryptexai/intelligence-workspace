@@ -18,7 +18,7 @@ export async function GET() {
       return Response.json({
         ok: true,
         database: "supabase-rest",
-        note: "Data dari Supabase (tabel cif_datasets) via PostgREST.",
+        note: "Data dari Supabase (tabel relasional) via PostgREST.",
       });
     }
   }

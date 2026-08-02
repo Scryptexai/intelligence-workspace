@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
 import { Network } from "lucide-react";
-import { projectRepository, entityRepository, eventRepository, knowledgeRepository } from "@/lib/api";
+import { projectRepository, entityRepository, eventRepository, knowledgeRepository } from "@/lib/api/repositoriesServer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EntityGraphLoader } from "@/components/graph/EntityGraphLoader";
 import { Badge } from "@/components/ui/badge";
+
+export const dynamic = "force-dynamic";
 
 export default async function GraphPage({
   params,

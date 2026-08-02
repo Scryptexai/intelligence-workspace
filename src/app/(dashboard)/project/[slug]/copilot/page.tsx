@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
 import { Bot } from "lucide-react";
-import { projectRepository, knowledgeRepository } from "@/lib/api";
+import { projectRepository, knowledgeRepository } from "@/lib/api/repositoriesServer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { CopilotChat } from "@/components/copilot/CopilotChat";
+
+export const dynamic = "force-dynamic";
 
 export default async function CopilotPage({
   params,

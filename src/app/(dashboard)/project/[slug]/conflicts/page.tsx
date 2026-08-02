@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { GitMerge } from "lucide-react";
-import { projectRepository, conflictRepository } from "@/lib/api";
+import { projectRepository, conflictRepository } from "@/lib/api/repositoriesServer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ConflictListWithSync } from "@/components/conflicts/ConflictListWithSync";
 import { ConflictAnalytics } from "@/components/conflicts/ConflictAnalytics";
@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 
 const VALID_SEVERITY = ["All", "Critical", "High", "Medium", "Low"] as const;
 const VALID_STATUS = ["All", "Resolved", "Unresolved"] as const;
+
+export const dynamic = "force-dynamic";
 
 export default async function ConflictsPage({
   params,

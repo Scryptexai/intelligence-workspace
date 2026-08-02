@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, GitMerge } from "lucide-react";
-import { projectRepository, conflictRepository } from "@/lib/api";
+import { projectRepository, conflictRepository } from "@/lib/api/repositoriesServer";
 import { getProjects, getConflicts } from "@/lib/data";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ConflictDiff } from "@/components/conflicts/ConflictDiff";
@@ -24,6 +24,8 @@ export function generateStaticParams() {
     getConflicts(p.slug).map((c) => ({ slug: p.slug, id: c.id }))
   );
 }
+
+export const dynamic = "force-dynamic";
 
 export default async function ConflictDetailPage({
   params,

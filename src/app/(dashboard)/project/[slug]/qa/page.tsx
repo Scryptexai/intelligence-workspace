@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { Radar } from "lucide-react";
-import dynamic from "next/dynamic";
-import { projectRepository, qaRepository } from "@/lib/api";
+import dynamicImport from "next/dynamic";
+import { projectRepository, qaRepository } from "@/lib/api/repositoriesServer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -22,12 +22,14 @@ const PHASE_STATUS_VARIANT: Record<string, "success" | "warning" | "critical" | 
 };
 
 // ECharts widgets are split into their own chunks — loaded only on this page.
-const RadarChart = dynamic(() => import("@/components/qa/RadarChart").then((m) => m.RadarChart), {
+const RadarChart = dynamicImport(() => import("@/components/qa/RadarChart").then((m) => m.RadarChart), {
   loading: () => <div className="shimmer h-[380px] w-full rounded-lg" />,
 });
-const DonutChart = dynamic(() => import("@/components/qa/DonutChart").then((m) => m.DonutChart), {
+const DonutChart = dynamicImport(() => import("@/components/qa/DonutChart").then((m) => m.DonutChart), {
   loading: () => <div className="shimmer h-[220px] w-full rounded-lg" />,
 });
+
+export const dynamic = "force-dynamic";
 
 export default async function QAPage({
   params,

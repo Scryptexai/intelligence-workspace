@@ -382,7 +382,9 @@ export async function dbGetEntity(slug: string, id: string): Promise<Entity | un
 export async function dbListRelationships(slug: string): Promise<Relationship[]> {
   if (REST) {
     try {
-      return await supabaseRest.listRelationships(slug);
+      const rows = await supabaseRest.listRelationships(slug);
+      // DB kosong → fallback ke mock agar Entity Graph tidak kosong
+      return rows.length > 0 ? rows : getMockRelationships(slug);
     } catch {
       /* lanjut */
     }
@@ -450,6 +452,8 @@ export async function dbListConflicts(slug: string, params?: ListParams): Promis
   if (REST) {
     try {
       let items = await supabaseRest.listConflicts(slug);
+      // DB kosong → fallback ke mock agar Conflict Center tidak kosong
+      if (items.length === 0) items = getMockConflicts(slug);
       if (params?.severity) items = items.filter((c) => c.severity === params.severity);
       if (params?.status) items = items.filter((c) => c.status === params.status);
       return items;

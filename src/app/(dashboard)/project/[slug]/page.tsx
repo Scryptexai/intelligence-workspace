@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
-import { projectRepository, knowledgeRepository, eventRepository } from "@/lib/api";
+import { projectRepository, knowledgeRepository, eventRepository } from "@/lib/api/repositoriesServer";
 import { ProjectLogo } from "@/components/brand/ProjectLogo";
 import { DashboardGrid } from "@/components/overview/DashboardGrid";
 import { ReportExport } from "@/components/export/ReportExport";
 import { Badge } from "@/components/ui/badge";
+
+export const dynamic = "force-dynamic";
 
 export default async function ProjectOverview({
   params,
