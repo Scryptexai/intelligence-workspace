@@ -2,6 +2,8 @@ import { dbListConflicts } from "@/db/dataService";
 import { apiJson } from "@/lib/api/response";
 import type { ListParams } from "@/lib/api/types";
 
+export const dynamic = "force-dynamic";
+
 /** GET /api/projects/[slug]/conflicts?severity=&status=&page= → { data, meta } */
 export async function GET(
   req: Request,

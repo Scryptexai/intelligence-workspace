@@ -3,6 +3,8 @@ import { getProjects } from "@/lib/data";
 import { dbStatus } from "@/db/dataService";
 import { apiJson } from "@/lib/api/response";
 
+export const dynamic = "force-dynamic";
+
 /** GET /api/config → ApiConfigInfo (mode data source + health DB) */
 export async function GET() {
   const db = dbStatus();

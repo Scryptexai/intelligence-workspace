@@ -1,6 +1,8 @@
 import { dbListProjects } from "@/db/dataService";
 import { apiJson } from "@/lib/api/response";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const projects = await dbListProjects();
   const data = projects.map((p) => ({

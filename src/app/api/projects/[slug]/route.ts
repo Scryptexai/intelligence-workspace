@@ -8,6 +8,8 @@ import {
 } from "@/db/dataService";
 import { apiJson, apiError } from "@/lib/api/response";
 
+export const dynamic = "force-dynamic";
+
 /**
  * Research data (knowledge, entities, events, conflicts) disajikan sebagai
  * layer API terpusat per slug — dibaca dari DB (Supabase/Postgres) saat

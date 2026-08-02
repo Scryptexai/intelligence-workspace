@@ -1,6 +1,8 @@
 import { dbListRelationships } from "@/db/dataService";
 import { apiJson } from "@/lib/api/response";
 
+export const dynamic = "force-dynamic";
+
 /** GET /api/projects/[slug]/relationships → { data: Relationship[], meta } */
 export async function GET(
   _req: Request,

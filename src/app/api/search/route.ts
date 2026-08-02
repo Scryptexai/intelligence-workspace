@@ -1,6 +1,8 @@
 import { dbSearch } from "@/db/dataService";
 import { apiJson } from "@/lib/api/response";
 
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/search?q=type:knowledge confidence:>90 status:stable
  * Faceted global search — envelope { data, meta }, DB-first.

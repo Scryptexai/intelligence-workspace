@@ -1,6 +1,8 @@
 import { dbGetKnowledgeItem } from "@/db/dataService";
 import { apiJson, apiError } from "@/lib/api/response";
 
+export const dynamic = "force-dynamic";
+
 /** GET /api/projects/[slug]/knowledge/[id] → { data: KnowledgeItem, meta } | 404 */
 export async function GET(
   _req: Request,

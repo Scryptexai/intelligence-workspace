@@ -2,6 +2,8 @@ import { dbListEntities, dbGetEntity } from "@/db/dataService";
 import { apiJson, apiError } from "@/lib/api/response";
 import type { ListParams } from "@/lib/api/types";
 
+export const dynamic = "force-dynamic";
+
 /** GET /api/projects/[slug]/entities[?id=&type=&q=] → { data, meta } */
 export async function GET(
   req: Request,

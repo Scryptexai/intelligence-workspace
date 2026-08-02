@@ -2,6 +2,8 @@ import { dbListKnowledge } from "@/db/dataService";
 import { apiJson } from "@/lib/api/response";
 import type { ListParams } from "@/lib/api/types";
 
+export const dynamic = "force-dynamic";
+
 /** GET /api/projects/[slug]/knowledge?q=&status=&page=&pageSize= → { data, meta } */
 export async function GET(
   req: Request,
