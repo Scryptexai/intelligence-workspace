@@ -1,14 +1,12 @@
 /**
- * Repository facade — API publik untuk seluruh akses data.
+ * Repository facade — CLIENT-SAFE.
  *
  *   DATA_SOURCE=mock     → mockAdapter (lib/data, offline)
  *   DATA_SOURCE=backend  → http client → REST API (backend/DB sungguhan)
  *
- * Backend Wajib membungkus respons dalam envelope { data, meta } agar
- * metadata (source, version, pagination) tidak hilang. Client meng-unwrap
- * otomatis — repository selalu mengembalikan data murni.
+ * ⚠️ Client Components hanya boleh import file ini (bukan repositoriesServer).
+ * Server Components pakai repositoriesServer (panggil DB langsung).
  */
-
 import { DATA_SOURCE } from "./config";
 import { mockAdapter } from "./mockAdapter";
 import { ENDPOINTS } from "./endpoints";
@@ -55,7 +53,6 @@ export const knowledgeRepository = {
       ? mockAdapter.listKnowledge(slug, params)
       : apiGet<KnowledgeItem[]>(ENDPOINTS.knowledge(slug), params).then((r) => r.data);
   },
-  /** Paginated — untuk backend dengan dataset besar. */
   listPaginated(slug: string, params?: PageParams & ListParams): Promise<Paginated<KnowledgeItem>> {
     if (MOCK) return mockAdapter.listKnowledgePaginated(slug, params);
     return apiGet<Paginated<KnowledgeItem>>(ENDPOINTS.knowledge(slug), params).then((r) => r.data);

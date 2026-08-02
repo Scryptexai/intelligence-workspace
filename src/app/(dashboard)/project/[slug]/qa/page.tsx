@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { Radar } from "lucide-react";
 import dynamic from "next/dynamic";
-import { projectRepository, qaRepository } from "@/lib/api";
+import { projectRepository, qaRepository } from "@/lib/api/repositoriesServer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import {

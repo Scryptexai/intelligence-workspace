@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { GitMerge } from "lucide-react";
-import { projectRepository, conflictRepository } from "@/lib/api";
+import { projectRepository, conflictRepository } from "@/lib/api/repositoriesServer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ConflictListWithSync } from "@/components/conflicts/ConflictListWithSync";
 import { ConflictAnalytics } from "@/components/conflicts/ConflictAnalytics";
