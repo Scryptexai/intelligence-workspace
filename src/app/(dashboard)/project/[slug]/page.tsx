@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { projectRepository, knowledgeRepository, eventRepository } from "@/lib/api";
+import { projectRepository, knowledgeRepository, eventRepository } from "@/lib/api/server";
 import { ProjectLogo } from "@/components/brand/ProjectLogo";
 import { DashboardGrid } from "@/components/overview/DashboardGrid";
 import { ReportExport } from "@/components/export/ReportExport";

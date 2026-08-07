@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { BookOpen } from "lucide-react";
-import { projectRepository, knowledgeRepository } from "@/lib/api";
+import { projectRepository, knowledgeRepository } from "@/lib/api/server";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { KnowledgeListWithSync } from "@/components/knowledge/KnowledgeListWithSync";
 import { ViewManager } from "@/components/layout/ViewManager";

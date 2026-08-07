@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, GitMerge } from "lucide-react";
-import { projectRepository, conflictRepository } from "@/lib/api";
+import { projectRepository, conflictRepository } from "@/lib/api/server";
 import { getProjects, getConflicts } from "@/lib/data";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ConflictDiff } from "@/components/conflicts/ConflictDiff";

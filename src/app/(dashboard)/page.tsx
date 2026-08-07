@@ -10,7 +10,7 @@ import {
   Sparkles,
   TrendingUp,
 } from "lucide-react";
-import { projectRepository, eventRepository, conflictRepository } from "@/lib/api";
+import { projectRepository, eventRepository, conflictRepository } from "@/lib/api/server";
 import type { Project } from "@/lib/types/project";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

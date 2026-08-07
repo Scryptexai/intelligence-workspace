@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { Activity } from "lucide-react";
-import { projectRepository, eventRepository } from "@/lib/api";
+import { projectRepository, eventRepository } from "@/lib/api/server";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { LiveTimeline } from "@/components/timeline/LiveTimeline";
 import { Badge } from "@/components/ui/badge";

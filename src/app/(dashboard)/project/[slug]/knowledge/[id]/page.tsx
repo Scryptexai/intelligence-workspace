@@ -9,7 +9,7 @@ import {
   Lightbulb,
   UserRound,
 } from "lucide-react";
-import { projectRepository, knowledgeRepository, eventRepository } from "@/lib/api";
+import { projectRepository, knowledgeRepository, eventRepository } from "@/lib/api/server";
 import { getProjects, getKnowledge } from "@/lib/data";
 import { EvidenceTrace } from "@/components/knowledge/EvidenceTrace";
 import { KnowledgeCard } from "@/components/project/KnowledgeCard";

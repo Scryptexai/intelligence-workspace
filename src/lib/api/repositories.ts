@@ -1,12 +1,12 @@
 /**
- * Repository facade — API publik untuk seluruh akses data.
+ * Repository facade (CLIENT-SAFE) — HTTP + mock only.
  *
  *   DATA_SOURCE=mock     → mockAdapter (lib/data, offline)
- *   DATA_SOURCE=backend  → http client → REST API (backend/DB sungguhan)
+ *   DATA_SOURCE=backend  → http client → /api (relative in browser)
  *
- * Backend Wajib membungkus respons dalam envelope { data, meta } agar
- * metadata (source, version, pagination) tidak hilang. Client meng-unwrap
- * otomatis — repository selalu mengembalikan data murni.
+ * This module is imported by client components, so it must NEVER pull in the
+ * database layer (pg/drizzle). Server Components get a faster direct-DB path via
+ * `@/lib/api/server` (server-only), which overrides the read methods below.
  */
 
 import { effectiveDataSource } from "./config";
@@ -27,9 +27,15 @@ import type { SavedView } from "@/lib/types/view";
 /** Mode diputuskan LIVE (bukan build-time) agar auto-detect /api/config berfungsi. */
 const isMockMode = (): boolean => effectiveDataSource() === "mock";
 
-/* ------------------------------------------------------------------ */
-/* project                                                             */
-/* ------------------------------------------------------------------ */
+/** Bentuk bundle dari GET /projects/{slug} (lihat docs/API_CONTRACT.md). */
+export interface ProjectBundle {
+  project: Project;
+  knowledge: unknown[];
+  entities: unknown[];
+  events: unknown[];
+  conflicts: unknown[];
+  relationships: unknown[];
+}
 
 export const projectRepository = {
   list(params?: ListParams): Promise<Project[]> {
@@ -39,9 +45,6 @@ export const projectRepository = {
   },
   get(slug: string): Promise<Project | undefined> {
     if (isMockMode()) return mockAdapter.getProject(slug);
-    // /projects/{slug} mengembalikan ProjectBundle (kontrak API_CONTRACT.md).
-    // Ambil .project; tetap toleran terhadap backend yang mengembalikan
-    // Project polos langsung (kontrak lama).
     return apiGet<ProjectBundle | Project>(ENDPOINTS.project(slug))
       .then((r) => {
         const d = r.data;
@@ -54,27 +57,12 @@ export const projectRepository = {
   },
 };
 
-/** Bentuk bundle dari GET /projects/{slug} (lihat docs/API_CONTRACT.md). */
-interface ProjectBundle {
-  project: Project;
-  knowledge: unknown[];
-  entities: unknown[];
-  events: unknown[];
-  conflicts: unknown[];
-  relationships: unknown[];
-}
-
-/* ------------------------------------------------------------------ */
-/* knowledge                                                           */
-/* ------------------------------------------------------------------ */
-
 export const knowledgeRepository = {
   list(slug: string, params?: ListParams): Promise<KnowledgeItem[]> {
     return isMockMode()
       ? mockAdapter.listKnowledge(slug, params)
       : apiGet<KnowledgeItem[]>(ENDPOINTS.knowledge(slug), params).then((r) => r.data);
   },
-  /** Paginated — untuk backend dengan dataset besar. */
   listPaginated(slug: string, params?: PageParams & ListParams): Promise<Paginated<KnowledgeItem>> {
     if (isMockMode()) return mockAdapter.listKnowledgePaginated(slug, params);
     return apiGet<Paginated<KnowledgeItem>>(ENDPOINTS.knowledge(slug), params).then((r) => r.data);
@@ -87,10 +75,6 @@ export const knowledgeRepository = {
           .catch(() => undefined);
   },
 };
-
-/* ------------------------------------------------------------------ */
-/* entity                                                              */
-/* ------------------------------------------------------------------ */
 
 export const entityRepository = {
   list(slug: string, params?: ListParams): Promise<Entity[]> {
@@ -112,10 +96,6 @@ export const entityRepository = {
   },
 };
 
-/* ------------------------------------------------------------------ */
-/* event                                                               */
-/* ------------------------------------------------------------------ */
-
 export const eventRepository = {
   list(slug: string, params?: ListParams): Promise<TimelineEvent[]> {
     return isMockMode()
@@ -127,10 +107,6 @@ export const eventRepository = {
     return apiGet<Paginated<TimelineEvent>>(ENDPOINTS.events(slug), params).then((r) => r.data);
   },
 };
-
-/* ------------------------------------------------------------------ */
-/* conflict                                                            */
-/* ------------------------------------------------------------------ */
 
 export const conflictRepository = {
   list(slug: string, params?: ListParams): Promise<Conflict[]> {
@@ -150,10 +126,6 @@ export const conflictRepository = {
           .catch(() => undefined);
   },
 };
-
-/* ------------------------------------------------------------------ */
-/* qa & behavior                                                       */
-/* ------------------------------------------------------------------ */
 
 export const qaRepository = {
   get(slug: string): Promise<QAReport | undefined> {
@@ -175,10 +147,6 @@ export const behaviorRepository = {
   },
 };
 
-/* ------------------------------------------------------------------ */
-/* market                                                              */
-/* ------------------------------------------------------------------ */
-
 export const marketRepository = {
   get(slug: string): Promise<MarketData> {
     return isMockMode()
@@ -187,10 +155,6 @@ export const marketRepository = {
   },
 };
 
-/* ------------------------------------------------------------------ */
-/* search                                                              */
-/* ------------------------------------------------------------------ */
-
 export const searchRepository = {
   query(q: string, params?: ListParams): Promise<SearchResult[]> {
     return isMockMode()
@@ -198,10 +162,6 @@ export const searchRepository = {
       : apiGet<SearchResult[]>(ENDPOINTS.search, { ...params, q }).then((r) => r.data);
   },
 };
-
-/* ------------------------------------------------------------------ */
-/* notes & views (kolaborasi)                                          */
-/* ------------------------------------------------------------------ */
 
 export const noteRepository = {
   get(scope: string, id: string): Promise<string> {
