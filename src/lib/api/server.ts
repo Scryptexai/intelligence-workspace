@@ -8,9 +8,15 @@ import "server-only";
  * empty ("only entity & timeline load"). Direct DB access is also faster and
  * works identically in the sandbox and on Vercel.
  *
- * In mock mode it defers to the client-safe repositories (mockAdapter). For any
- * failure it falls back to the client-safe HTTP repository so behaviour never
- * regresses.
+ * FALLBACK POLICY (2026-08-09): jika pembacaan DB langsung melempar, fallback
+ * ke data KOSONG yang bertipe benar (bukan mock, bukan HTTP self-fetch).
+ * Alasannya:
+ *  - Self-fetch HTTP ke /api absolut di belakang Vercel Authentication pasti
+ *    dialihkan ke halaman login HTML → JSON.parse melempar → render RSC crash
+ *    dengan error digest (halaman "Failed to load project intelligence").
+ *  - Data mock menyesatkan — pengguna ingin hanya data asli Supabase.
+ * Fallback kosong membuat halaman tetap ter-render (empty state) tanpa crash;
+ * begitu DB sehat, data real langsung tampil.
  *
  * `import "server-only"` guarantees this file (and its pg/drizzle dependency via
  * dataService) can never be pulled into a client bundle.
@@ -35,7 +41,7 @@ export const projectRepository = {
     try {
       return await db.dbListProjects();
     } catch {
-      return R.projectRepository.list(params);
+      return [];
     }
   },
   async get(slug: string): Promise<Project | undefined> {
@@ -43,7 +49,7 @@ export const projectRepository = {
     try {
       return await db.dbGetProject(slug);
     } catch {
-      return R.projectRepository.get(slug);
+      return undefined;
     }
   },
 };
@@ -54,7 +60,7 @@ export const knowledgeRepository = {
     try {
       return await db.dbListKnowledge(slug, params);
     } catch {
-      return R.knowledgeRepository.list(slug, params);
+      return [];
     }
   },
   listPaginated: R.knowledgeRepository.listPaginated,
@@ -63,7 +69,7 @@ export const knowledgeRepository = {
     try {
       return await db.dbGetKnowledgeItem(slug, id);
     } catch {
-      return R.knowledgeRepository.get(slug, id);
+      return undefined;
     }
   },
 };
@@ -74,7 +80,7 @@ export const entityRepository = {
     try {
       return await db.dbListEntities(slug);
     } catch {
-      return R.entityRepository.list(slug, params);
+      return [];
     }
   },
   async get(slug: string, id: string): Promise<Entity | undefined> {
@@ -82,7 +88,7 @@ export const entityRepository = {
     try {
       return await db.dbGetEntity(slug, id);
     } catch {
-      return R.entityRepository.get(slug, id);
+      return undefined;
     }
   },
   async relationships(slug: string): Promise<Relationship[]> {
@@ -90,7 +96,7 @@ export const entityRepository = {
     try {
       return await db.dbListRelationships(slug);
     } catch {
-      return R.entityRepository.relationships(slug);
+      return [];
     }
   },
 };
@@ -101,7 +107,7 @@ export const eventRepository = {
     try {
       return await db.dbListEvents(slug);
     } catch {
-      return R.eventRepository.list(slug, params);
+      return [];
     }
   },
   listPaginated: R.eventRepository.listPaginated,
@@ -113,7 +119,7 @@ export const conflictRepository = {
     try {
       return await db.dbListConflicts(slug, params);
     } catch {
-      return R.conflictRepository.list(slug, params);
+      return [];
     }
   },
   listPaginated: R.conflictRepository.listPaginated,
@@ -122,7 +128,7 @@ export const conflictRepository = {
     try {
       return await db.dbGetConflict(slug, id);
     } catch {
-      return R.conflictRepository.get(slug, id);
+      return undefined;
     }
   },
 };
@@ -133,7 +139,7 @@ export const qaRepository = {
     try {
       return await db.dbGetQa(slug);
     } catch {
-      return R.qaRepository.get(slug);
+      return undefined;
     }
   },
 };
@@ -144,7 +150,7 @@ export const behaviorRepository = {
     try {
       return await db.dbGetBehavior(slug);
     } catch {
-      return R.behaviorRepository.get(slug);
+      return undefined;
     }
   },
 };
@@ -155,7 +161,7 @@ export const searchRepository = {
     try {
       return await db.dbSearch(q);
     } catch {
-      return R.searchRepository.query(q, params);
+      return [];
     }
   },
 };

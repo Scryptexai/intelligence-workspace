@@ -46,6 +46,7 @@ import type { Conflict } from "@/lib/types/conflict";
 import type { SearchResult } from "@/lib/data";
 import type { ListParams } from "@/lib/api/types";
 import { supabaseRest, supabaseRestEnabled } from "./supabaseService";
+import { asConflictVersion, asStringArray, asStringRecord } from "./coerce";
 
 const DB = isDbConfigured();
 /** Prioritas sumber: Supabase REST (cif_datasets) → pg pool → mock. */
@@ -102,10 +103,10 @@ async function assembleProject(slug: string): Promise<Project | undefined> {
 
   const beh: BehaviorProfile | undefined = behavior[0]
     ? {
-        strategicObjectives: behavior[0].strategicObjectives ?? [],
-        decisionPatterns: behavior[0].decisionPatterns ?? [],
-        riskResponse: behavior[0].riskResponse ?? [],
-        tradeOffs: behavior[0].tradeOffs ?? [],
+        strategicObjectives: asStringArray(behavior[0].strategicObjectives),
+        decisionPatterns: asStringArray(behavior[0].decisionPatterns),
+        riskResponse: asStringArray(behavior[0].riskResponse),
+        tradeOffs: asStringArray(behavior[0].tradeOffs),
       }
     : behaviorMock[slug];
 
@@ -128,7 +129,7 @@ async function assembleProject(slug: string): Promise<Project | undefined> {
     eventCount: p.eventCount,
     lastUpdated: p.lastUpdated ?? "",
     lastActivityHours: p.lastActivityHours,
-    tags: p.tags ?? [],
+    tags: asStringArray(p.tags),
     qa,
     behavior: beh ?? { strategicObjectives: [], decisionPatterns: [], riskResponse: [], tradeOffs: [] },
   };
@@ -168,7 +169,7 @@ export async function dbListProjects(): Promise<Project[]> {
       eventCount: p.eventCount,
       lastUpdated: p.lastUpdated ?? "",
       lastActivityHours: p.lastActivityHours,
-      tags: p.tags ?? [],
+      tags: asStringArray(p.tags),
       qa: qaReports[p.slug] ?? { total: p.cifScore, dimensions: [], phases: [] },
       behavior: behaviorMock[p.slug] ?? {
         strategicObjectives: [],
@@ -276,8 +277,8 @@ async function rowToKnowledge(row: (typeof knowledgeItems.$inferSelect)): Promis
       weight: e.weight,
       note: e.note ?? undefined,
     })),
-    relatedKnowledge: row.relatedKnowledge ?? [],
-    dependencies: row.dependencies ?? [],
+    relatedKnowledge: asStringArray(row.relatedKnowledge),
+    dependencies: asStringArray(row.dependencies),
   };
 }
 
@@ -335,9 +336,9 @@ export async function dbListEntities(slug: string): Promise<Entity[]> {
       status: (e.status as Entity["status"]) ?? "Unknown",
       description: e.description ?? "",
       founded: e.founded ?? undefined,
-      relatedKnowledge: e.relatedKnowledge ?? [],
-      relatedEvents: e.relatedEvents ?? [],
-      metadata: e.metadata ?? {},
+      relatedKnowledge: asStringArray(e.relatedKnowledge),
+      relatedEvents: asStringArray(e.relatedEvents),
+      metadata: asStringRecord(e.metadata),
     }));
   } catch {
     return getMockEntities(slug);
@@ -370,9 +371,9 @@ export async function dbGetEntity(slug: string, id: string): Promise<Entity | un
       status: (e.status as Entity["status"]) ?? "Unknown",
       description: e.description ?? "",
       founded: e.founded ?? undefined,
-      relatedKnowledge: e.relatedKnowledge ?? [],
-      relatedEvents: e.relatedEvents ?? [],
-      metadata: e.metadata ?? {},
+      relatedKnowledge: asStringArray(e.relatedKnowledge),
+      relatedEvents: asStringArray(e.relatedEvents),
+      metadata: asStringRecord(e.metadata),
     };
   } catch {
     return getMockEntity(slug, id);
@@ -429,12 +430,12 @@ export async function dbListEvents(slug: string): Promise<TimelineEvent[]> {
       name: e.name,
       date: e.date ?? "",
       type: e.type as TimelineEvent["type"],
-      participants: e.participants ?? [],
+      participants: asStringArray(e.participants),
       description: e.description ?? "",
       result: e.result ?? "",
       source: e.source ?? "",
       url: e.url ?? undefined,
-      affectedKnowledge: e.affectedKnowledge ?? [],
+      affectedKnowledge: asStringArray(e.affectedKnowledge),
       impact: (e.impact as TimelineEvent["impact"]) ?? "Medium",
     }));
   } catch {
@@ -476,10 +477,10 @@ export async function dbListConflicts(slug: string, params?: ListParams): Promis
       description: c.description ?? "",
       severity: (c.severity as Conflict["severity"]) ?? "Medium",
       status: (c.status as Conflict["status"]) ?? "Unresolved",
-      versionA: c.versionA,
-      versionB: c.versionB,
+      versionA: asConflictVersion(c.versionA, "Version A"),
+      versionB: asConflictVersion(c.versionB, "Version B"),
       resolution: c.resolution ?? undefined,
-      affectedKnowledge: c.affectedKnowledge ?? [],
+      affectedKnowledge: asStringArray(c.affectedKnowledge),
       affectedPhase: c.affectedPhase ?? "",
       updatedAt: c.updatedAt ?? "",
     }));
@@ -517,10 +518,10 @@ export async function dbGetConflict(
       description: c.description ?? "",
       severity: (c.severity as Conflict["severity"]) ?? "Medium",
       status: (c.status as Conflict["status"]) ?? "Unresolved",
-      versionA: c.versionA,
-      versionB: c.versionB,
+      versionA: asConflictVersion(c.versionA, "Version A"),
+      versionB: asConflictVersion(c.versionB, "Version B"),
       resolution: c.resolution ?? undefined,
-      affectedKnowledge: c.affectedKnowledge ?? [],
+      affectedKnowledge: asStringArray(c.affectedKnowledge),
       affectedPhase: c.affectedPhase ?? "",
       updatedAt: c.updatedAt ?? "",
     };
@@ -557,10 +558,10 @@ export async function dbGetBehavior(slug: string): Promise<BehaviorProfile | und
     const b = rows[0];
     if (!b) return behaviorMock[slug];
     return {
-      strategicObjectives: b.strategicObjectives ?? [],
-      decisionPatterns: b.decisionPatterns ?? [],
-      riskResponse: b.riskResponse ?? [],
-      tradeOffs: b.tradeOffs ?? [],
+      strategicObjectives: asStringArray(b.strategicObjectives),
+      decisionPatterns: asStringArray(b.decisionPatterns),
+      riskResponse: asStringArray(b.riskResponse),
+      tradeOffs: asStringArray(b.tradeOffs),
     };
   } catch {
     return behaviorMock[slug];

@@ -72,8 +72,8 @@ export function CompareTable({
           </thead>
           <tbody>
             {METRICS.map((m, i) => {
-              const va = a[m.key];
-              const vb = b[m.key];
+              const va = a[m.key] ?? 0;
+              const vb = b[m.key] ?? 0;
               const delta = Number((va - vb).toFixed(1));
               const better =
                 m.key === "conflictCount" ? delta < 0 : delta > 0;
@@ -214,14 +214,14 @@ export function CompareTable({
                   <td className="px-4 py-3 font-semibold text-foreground">{label}</td>
                   <td className="px-4 py-3">
                     <ul className="list-inside list-disc space-y-1 text-muted-foreground">
-                      {a.behavior[key].map((s) => (
+                      {(a.behavior?.[key] ?? []).map((s) => (
                         <li key={s} className="leading-snug">{s}</li>
                       ))}
                     </ul>
                   </td>
                   <td className="px-4 py-3">
                     <ul className="list-inside list-disc space-y-1 text-muted-foreground">
-                      {b.behavior[key].map((s) => (
+                      {(b.behavior?.[key] ?? []).map((s) => (
                         <li key={s} className="leading-snug">{s}</li>
                       ))}
                     </ul>

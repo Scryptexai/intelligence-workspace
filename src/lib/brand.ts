@@ -9,6 +9,101 @@ export const PROJECT_GRADIENTS: Record<string, { from: string; to: string }> = {
   optimism: { from: "#FF0420", to: "#7A0C1E" },
 };
 
+/* ------------------------------------------------------------------ */
+/* Project brand logos — logo RESMI per project (bukan placeholder)   */
+/* ------------------------------------------------------------------ */
+
+export interface ProjectBrand {
+  /** URL logo curated (official/brand kit), dicoba paling dulu */
+  urls?: string[];
+  /** warna brand (fallback tile + aksen) */
+  color?: string;
+  /** slug DefiLlama bila berbeda dari slug project */
+  llamao?: string;
+  /** true = jangan coba ikon DefiLlama (langsung monogram bila curated gagal) */
+  noLlamao?: boolean;
+}
+
+/**
+ * Registry brand yang dikenal (logo curated + warna). DAFTAR INI OPSIONAL —
+ * resolver tetap menemukan logo untuk slug baru secara otomatis via DefiLlama
+ * (chain + protocol icon), lalu jatuh ke monogram gradient. Menambah project
+ * baru di Supabase TIDAK butuh perubahan kode.
+ */
+export const PROJECT_BRAND: Record<string, ProjectBrand> = {
+  /* L1/L2 chains */
+  arbitrum: {
+    urls: [
+      "https://cryptologos.cc/logos/arbitrum-arb-logo.svg",
+      "https://arbitrum.io/brandkit/logo_clear_space.svg",
+    ],
+    color: "#28A0F0",
+  },
+  optimism: {
+    urls: ["https://cryptologos.cc/logos/optimism-ethereum-op-logo.svg"],
+    color: "#FF0420",
+  },
+  avalanche: { urls: ["https://cryptologos.cc/logos/avalanche-avax-logo.svg"], color: "#E84142" },
+  cardano: { urls: ["https://cryptologos.cc/logos/cardano-ada-logo.svg"], color: "#0033AD" },
+  eos: { urls: ["https://cryptologos.cc/logos/eos-eos-logo.svg"], color: "#241F31" },
+  aptos: { urls: ["https://cryptologos.cc/logos/aptos-apt-logo.svg"], color: "#2DD8A3" },
+  celestia: { urls: ["https://cryptologos.cc/logos/celestia-tia-logo.svg"], color: "#7B2FE4" },
+  hyperliquid: { urls: ["https://cryptologos.cc/logos/hyperliquid-hype-logo.svg"], color: "#0CE0B1" },
+  monad: { color: "#6B45E0" },
+  megaeth: { color: "#FF6B35" },
+  "movement-labs": { urls: ["https://cryptologos.cc/logos/movement-move-logo.svg"], color: "#F5D90A", llamao: "movement" },
+
+  /* DeFi / protocols */
+  aave: { urls: ["https://cryptologos.cc/logos/aave-aave-logo.svg"], color: "#B6509E" },
+  compound: { urls: ["https://cryptologos.cc/logos/compound-comp-logo.svg"], color: "#00D395" },
+  makerdao: { urls: ["https://cryptologos.cc/logos/maker-mkr-logo.svg"], color: "#1AAB9B" },
+  lido: { urls: ["https://cryptologos.cc/logos/lido-dao-ldo-logo.svg"], color: "#F69988" },
+  ethena: { urls: ["https://cryptologos.cc/logos/ethena-ena-logo.svg"], color: "#1F1F1F" },
+  jito: { urls: ["https://cryptologos.cc/logos/jito-jto-logo.svg"], color: "#FB8C00" },
+  bancor: { urls: ["https://cryptologos.cc/logos/bancor-bnt-logo.svg"], color: "#0F59D1" },
+  kamino: { color: "#D0FE1D" },
+
+  /* Infra / DePIN / oracle & bridges */
+  layerzero: { urls: ["https://cryptologos.cc/logos/layerzero-zro-logo.svg"], color: "#A855F7" },
+  helium: { urls: ["https://cryptologos.cc/logos/helium-hnt-logo.svg"], color: "#474DFF" },
+  grass: { color: "#3DD981" },
+  irys: { color: "#F96E46" },
+
+  /* NFT / gaming / social */
+  "axie-infinity": { urls: ["https://cryptologos.cc/logos/axie-infinity-axs-logo.svg"], color: "#3C7CC4" },
+  blur: { urls: ["https://cryptologos.cc/logos/blur-blur-logo.svg"], color: "#FF8700" },
+  "friend-tech": { color: "#4EA1F7" },
+  notcoin: { urls: ["https://cryptologos.cc/logos/notcoin-not-logo.svg"], color: "#F5C542" },
+
+  /* points/incentive ecosystems */
+  blast: { color: "#FCFC03", llamao: "blast" },
+};
+
+/**
+ * Resolver logo skala penuh — bekerja untuk slug APAPUN (termasuk project
+ * baru yang ditambahkan di Supabase tanpa menyentuh kode):
+ *   1. URL curated (bila slug terdaftar di PROJECT_BRAND)
+ *   2. ikon chain DefiLlama    — covers semua L1/L2 berdasarkan slug
+ *   3. ikon protocol DefiLlama — covers ribuan dApp/DeFi berdasarkan slug
+ * Komponen ProjectLogo mencoba berurutan dan jatuh ke monogram gradient bila
+ * semua kandidat gagal (slug tidak dikenal mana pun).
+ */
+export function projectBrandUrls(slug: string): string[] {
+  const key = slug.toLowerCase();
+  const b = PROJECT_BRAND[key];
+  const urls = [...(b?.urls ?? [])];
+  if (!b?.noLlamao) {
+    const ls = b?.llamao ?? key;
+    urls.push(`https://icons.llamao.fi/icons/chains/rsz_${ls}.jpg`);
+    urls.push(`https://icons.llamao.fi/icons/protocols/rsz_${ls}.jpg`);
+  }
+  return urls;
+}
+
+export function projectBrandColor(slug: string): string {
+  return PROJECT_BRAND[slug.toLowerCase()]?.color ?? projectGradient(slug).from;
+}
+
 export function faviconSvgDataUri(symbol: string, from: string, to: string): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient></defs><rect width="32" height="32" rx="8" fill="url(#g)"/><text x="16" y="22" font-family="Arial,Helvetica,sans-serif" font-size="15" font-weight="bold" text-anchor="middle" fill="#fff">${symbol.slice(0, 2)}</text></svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;

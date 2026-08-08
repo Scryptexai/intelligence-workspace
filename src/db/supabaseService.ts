@@ -23,6 +23,13 @@ import type { TimelineEvent } from "@/lib/types/event";
 import type { Conflict } from "@/lib/types/conflict";
 import type { SavedView } from "@/lib/types/view";
 import type { SearchResult } from "@/lib/data";
+import {
+  asConflictVersion,
+  asNumber,
+  asStringArray,
+  asStringRecord,
+  asText,
+} from "./coerce";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
 const SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -113,51 +120,51 @@ async function buildProject(p: RawProject): Promise<Project> {
   ]);
 
   const qa: QAReport = {
-    total: p.cif_score,
+    total: asNumber(p.cif_score),
     dimensions: dims.map((d) => ({
       key: (QA_KEY_MAP[d.key] ?? d.key) as QAReport["dimensions"][number]["key"],
-      label: d.label,
-      score: d.score,
-      weight: d.weight,
+      label: asText(d.label, d.key),
+      score: asNumber(d.score),
+      weight: asNumber(d.weight),
       description: d.description ?? "",
     })),
     phases: phases.map((ph) => ({
-      name: ph.name,
+      name: asText(ph.name, "Phase"),
       status: (ph.status ?? "Not Started") as QAReport["phases"][number]["status"],
-      score: ph.score,
+      score: asNumber(ph.score),
       owner: ph.owner ?? "",
     })),
   };
 
   const behaviorProfile: BehaviorProfile = behavior
     ? {
-        strategicObjectives: behavior.strategic_objectives ?? [],
-        decisionPatterns: behavior.decision_patterns ?? [],
-        riskResponse: behavior.risk_response ?? [],
-        tradeOffs: behavior.trade_offs ?? [],
+        strategicObjectives: asStringArray(behavior.strategic_objectives),
+        decisionPatterns: asStringArray(behavior.decision_patterns),
+        riskResponse: asStringArray(behavior.risk_response),
+        tradeOffs: asStringArray(behavior.trade_offs),
       }
     : { strategicObjectives: [], decisionPatterns: [], riskResponse: [], tradeOffs: [] };
 
   return {
-    id: p.id,
+    id: asText(p.id, p.slug),
     slug: p.slug,
-    name: p.name,
-    symbol: p.symbol,
+    name: asText(p.name, p.slug),
+    symbol: asText(p.symbol, p.slug.slice(0, 3).toUpperCase()),
     tagline: p.tagline ?? "",
     description: p.description ?? "",
     color: p.color ?? "#22d3ee",
     accent: p.accent ?? "#0e7490",
     status: (p.status as Project["status"]) ?? "active",
-    cifScore: p.cif_score,
-    confidence: p.confidence,
-    knowledgeCount: p.knowledge_count,
-    conflictCount: p.conflict_count,
-    coverage: p.coverage,
-    entityCount: p.entity_count,
-    eventCount: p.event_count,
+    cifScore: asNumber(p.cif_score),
+    confidence: asNumber(p.confidence),
+    knowledgeCount: asNumber(p.knowledge_count),
+    conflictCount: asNumber(p.conflict_count),
+    coverage: asNumber(p.coverage),
+    entityCount: asNumber(p.entity_count),
+    eventCount: asNumber(p.event_count),
     lastUpdated: p.last_updated ?? "",
-    lastActivityHours: p.last_activity_hours,
-    tags: p.tags ?? [],
+    lastActivityHours: asNumber(p.last_activity_hours),
+    tags: asStringArray(p.tags),
     qa,
     behavior: behaviorProfile,
   };
@@ -208,25 +215,25 @@ function mapKnowledge(k: RawKnowledge, evs: RawEvidence[]): KnowledgeItem {
   return {
     id: k.id,
     projectSlug: k.project_slug,
-    name: k.name,
+    name: asText(k.name, k.id),
     category: k.category ?? "",
     description: k.description ?? "",
-    confidence: k.confidence,
+    confidence: asNumber(k.confidence),
     status: (k.status as KnowledgeItem["status"]) ?? "Stable",
     updatedAt: k.updated_at ?? "",
     author: k.author ?? "",
     evidence: evs.map((e) => ({
       id: e.id,
       eventId: e.event_id ?? "",
-      eventName: e.event_name,
+      eventName: asText(e.event_name),
       date: e.date ?? "",
       source: e.source ?? "",
       url: e.url ?? "#",
-      weight: e.weight,
+      weight: asNumber(e.weight, 1),
       note: e.note ?? undefined,
     })),
-    relatedKnowledge: k.related_knowledge ?? [],
-    dependencies: k.dependencies ?? [],
+    relatedKnowledge: asStringArray(k.related_knowledge),
+    dependencies: asStringArray(k.dependencies),
   };
 }
 
@@ -259,14 +266,14 @@ function mapEntity(e: RawEntity): Entity {
   return {
     id: e.id,
     projectSlug: e.project_slug,
-    name: e.name,
+    name: asText(e.name, e.id),
     type: (e.type as Entity["type"]) ?? "Company",
     status: (e.status as Entity["status"]) ?? "Unknown",
     description: e.description ?? "",
     founded: e.founded ?? undefined,
-    relatedKnowledge: e.related_knowledge ?? [],
-    relatedEvents: e.related_events ?? [],
-    metadata: e.metadata ?? {},
+    relatedKnowledge: asStringArray(e.related_knowledge),
+    relatedEvents: asStringArray(e.related_events),
+    metadata: asStringRecord(e.metadata),
   };
 }
 
@@ -293,15 +300,15 @@ function mapEvent(ev: RawEvent): TimelineEvent {
   return {
     id: ev.id,
     projectSlug: ev.project_slug,
-    name: ev.name,
+    name: asText(ev.name, ev.id),
     date: ev.date ?? "",
     type: (ev.type as TimelineEvent["type"]) ?? "Launch",
-    participants: ev.participants ?? [],
+    participants: asStringArray(ev.participants),
     description: ev.description ?? "",
     result: ev.result ?? "",
     source: ev.source ?? "",
     url: ev.url ?? undefined,
-    affectedKnowledge: ev.affected_knowledge ?? [],
+    affectedKnowledge: asStringArray(ev.affected_knowledge),
     impact: (ev.impact as TimelineEvent["impact"]) ?? "Medium",
   };
 }
@@ -327,20 +334,20 @@ interface RawConflict {
 }
 
 function mapConflict(c: RawConflict): Conflict {
-  const vA = c.version_a ?? { source: "Version A", value: "", date: "", url: "#", evidence: "" };
-  const vB = c.version_b ?? { source: "Version B", value: "", date: "", url: "#", evidence: "" };
+  const vA = asConflictVersion(c.version_a, "Version A");
+  const vB = asConflictVersion(c.version_b, "Version B");
   return {
     id: c.id,
     projectSlug: c.project_slug,
     category: (c.category as Conflict["category"]) ?? "Data",
-    title: c.title,
+    title: asText(c.title, c.id),
     description: c.description ?? "",
     severity: (c.severity as Conflict["severity"]) ?? "Medium",
     status: (c.status as Conflict["status"]) ?? "Unresolved",
     versionA: vA,
     versionB: vB,
     resolution: c.resolution ?? undefined,
-    affectedKnowledge: c.affected_knowledge ?? [],
+    affectedKnowledge: asStringArray(c.affected_knowledge),
     affectedPhase: c.affected_phase ?? "",
     updatedAt: c.updated_at ?? "",
   };
