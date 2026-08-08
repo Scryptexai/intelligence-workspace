@@ -27,18 +27,46 @@ export default function ComparePage() {
   // Data-source agnostic: TanStack Query via repository (placeholder = mock sync)
   const fallbackProjects = useMemo(() => getProjects(), []);
   const { data: projectsData } = useProjectsList();
-  const projects = projectsData ?? fallbackProjects;
+  const projects =
+    Array.isArray(projectsData) && projectsData.length > 0 ? projectsData : fallbackProjects;
 
   const [aSlug, setASlug] = useState(fallbackProjects[0]?.slug ?? "");
   const [bSlug, setBSlug] = useState(fallbackProjects[1]?.slug ?? fallbackProjects[0]?.slug ?? "");
 
+  // Tahan terhadap slug yang tidak ada di daftar (mis. fallback mock) dan
+  // daftar dengan 0/1 project — jangan pernah undefined.
   const a = projects.find((p) => p.slug === aSlug) ?? projects[0];
-  const b = projects.find((p) => p.slug === bSlug) ?? projects[1];
+  const b =
+    projects.find((p) => p.slug === bSlug) ??
+    projects[1] ??
+    projects[0];
 
-  const { data: knowledgeAData } = useKnowledgeQuery(aSlug);
-  const { data: knowledgeBData } = useKnowledgeQuery(bSlug);
-  const knowledgeA = knowledgeAData ?? getKnowledge(aSlug);
-  const knowledgeB = knowledgeBData ?? getKnowledge(bSlug);
+  const { data: knowledgeAData } = useKnowledgeQuery(a?.slug ?? "");
+  const { data: knowledgeBData } = useKnowledgeQuery(b?.slug ?? "");
+  const knowledgeA = knowledgeAData ?? getKnowledge(a?.slug ?? "");
+  const knowledgeB = knowledgeBData ?? getKnowledge(b?.slug ?? "");
+
+  if (!a || !b) {
+    return (
+      <div className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
+        <PageHeader
+          icon={GitCompareArrows}
+          title="Compare Projects"
+          description="Side-by-side intelligence comparison: CIF metrics, knowledge overlap and behavioral patterns."
+        />
+        <div className="rounded-lg border border-dashed border-border py-16 text-center">
+          <p className="text-[13px] text-muted-foreground">
+            Belum ada project yang bisa dibandingkan. Tambahkan minimal satu
+            project di Supabase terlebih dahulu.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const dimsA = a.qa?.dimensions ?? [];
+  const dimsB = b.qa?.dimensions ?? [];
+  const hasRadar = dimsA.length > 0 && dimsB.length > 0;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
@@ -101,22 +129,32 @@ export default function ComparePage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-2 pt-0">
-          <RadarChart
-            dims={a.qa.dimensions.map((d) => ({ label: d.label }))}
-            series={[
-              {
-                name: a.name,
-                color: a.color,
-                values: a.qa.dimensions.map((d) => d.score),
-              },
-              {
-                name: b.name,
-                color: b.color,
-                values: b.qa.dimensions.map((d) => d.score),
-              },
-            ]}
-            height={360}
-          />
+          {hasRadar ? (
+            <RadarChart
+              dims={dimsA.map((d) => ({ label: d.label }))}
+              series={[
+                {
+                  name: a.name,
+                  color: a.color,
+                  values: dimsA.map((d) => d.score),
+                },
+                {
+                  name: b.name,
+                  color: b.color,
+                  values: dimsB.map((d) => d.score),
+                },
+              ]}
+              height={360}
+            />
+          ) : (
+            <div className="flex h-[360px] items-center justify-center rounded-md border border-dashed border-border/70">
+              <p className="max-w-sm text-center text-[12px] text-muted-foreground">
+                Data dimensi CIF belum tersedia untuk salah satu project.
+                Lengkapi tabel <span className="font-mono">qa_dimensions</span> di
+                Supabase untuk menampilkan radar overlay.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -325,7 +325,7 @@ export function DashboardGrid({ slug }: { slug: string }) {
               href={`/project/${slug}/timeline?event=${ev.id}`}
               className="flex items-center gap-2 rounded px-1.5 py-1 transition-colors hover:bg-accent/60"
             >
-              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: EVENT_COLORS[ev.type] }} />
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: EVENT_COLORS[ev.type] ?? "#64748b" }} />
               <span className="min-w-0 flex-1 truncate text-[11.5px] text-foreground/90">{ev.name}</span>
               <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
                 {new Date(ev.date).toLocaleDateString("en-US", { month: "short", year: "numeric" })}

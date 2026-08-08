@@ -43,8 +43,10 @@ export default async function QAPage({
 
   // Fallback: gunakan QA yang tertanam di project kalau endpoint QA kosong.
   const qa = qaData ?? project.qa;
+  const dims = qa?.dimensions ?? [];
+  const phases = qa?.phases ?? [];
 
-  if (!qa) {
+  if (!qa || dims.length === 0) {
     return (
       <div className="space-y-6">
         <PageHeader
@@ -54,7 +56,9 @@ export default async function QAPage({
         />
         <div className="rounded-lg border border-dashed border-border py-16 text-center">
           <p className="text-[13px] text-muted-foreground">
-            QA report belum tersedia untuk proyek ini.
+            {qa
+              ? "Skor CIF belum diisi untuk proyek ini. Lengkapi tabel qa_dimensions & qa_phases di Supabase untuk menampilkan radar dan breakdown."
+              : "QA report belum tersedia untuk proyek ini."}
           </p>
         </div>
       </div>
@@ -68,7 +72,7 @@ export default async function QAPage({
         title="QA Center"
         description="Quality assurance across six CIF dimensions, phase status, and the weighted contribution of each dimension to the overall score."
       >
-        <Badge variant="success">CIF {qa.total}</Badge>
+        <Badge variant="success">CIF {qa.total ?? 0}</Badge>
       </PageHeader>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-5">
@@ -81,12 +85,12 @@ export default async function QAPage({
           </CardHeader>
           <CardContent className="p-2 pt-0">
             <RadarChart
-              dims={qa.dimensions.map((d) => ({ label: d.label }))}
+              dims={dims.map((d) => ({ label: d.label }))}
               series={[
                 {
                   name: project.name,
                   color: project.color,
-                  values: qa.dimensions.map((d) => d.score),
+                  values: dims.map((d) => d.score),
                 },
               ]}
               footnote="Research grounded in 10 completed evidence phases · weighted across 6 CIF dimensions"
@@ -105,10 +109,10 @@ export default async function QAPage({
               </CardHeader>
               <CardContent className="p-2 pt-0">
                 <DonutChart
-                  items={qa.dimensions.map((d) => ({ name: d.label, value: d.weight }))}
+                  items={dims.map((d) => ({ name: d.label, value: d.weight }))}
                   color={project.color}
                   centerLabel="weights %"
-                  centerValue={String(qa.dimensions.reduce((s, d) => s + d.weight, 0))}
+                  centerValue={String(dims.reduce((s, d) => s + d.weight, 0))}
                 />
               </CardContent>
             </Card>
@@ -120,12 +124,12 @@ export default async function QAPage({
               </CardHeader>
               <CardContent className="p-2 pt-0">
                 <RadarChart
-                  dims={qa.dimensions.map((d) => ({ label: d.label }))}
+                  dims={dims.map((d) => ({ label: d.label }))}
                   series={[
                     {
                       name: project.name,
                       color: project.color,
-                      values: qa.dimensions.map((d) => d.score),
+                      values: dims.map((d) => d.score),
                     },
                   ]}
                   height={240}
@@ -141,7 +145,7 @@ export default async function QAPage({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 p-4 pt-2">
-              {qa.dimensions.map((d) => {
+              {dims.map((d) => {
                 const contribution = Math.round(d.score * d.weight) / 100;
                 return (
                   <div key={d.key}>
@@ -204,7 +208,7 @@ export default async function QAPage({
             </CardHeader>
             <CardContent className="p-4 pt-2">
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {qa.phases.map((ph) => (
+                {phases.map((ph) => (
                   <div
                     key={ph.name}
                     className="flex items-center gap-3 rounded-md border border-border/70 bg-muted/30 px-3 py-2.5"
@@ -217,7 +221,7 @@ export default async function QAPage({
                         {ph.owner}
                       </div>
                     </div>
-                    <Badge variant={PHASE_STATUS_VARIANT[ph.status]}>{ph.status}</Badge>
+                    <Badge variant={PHASE_STATUS_VARIANT[ph.status] ?? "muted"}>{ph.status}</Badge>
                     <span className="font-mono text-[12px] font-bold tabular-nums text-foreground">
                       {ph.score}
                     </span>

@@ -37,7 +37,7 @@ export default async function ProjectOverview({
               {project.description}
             </p>
             <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-              {project.tags.map((t) => (
+              {(project.tags ?? []).map((t) => (
                 <Badge key={t} variant="secondary" className="normal-case tracking-normal">
                   {t}
                 </Badge>

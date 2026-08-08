@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils/helpers";
 
 /**
  * Renders a brand logo from an ordered list of SVG URLs, trying each in
- * sequence. Falls back to a colored initial tile when nothing loads.
+ * sequence. Falls back to a colored initial tile (or a custom `fallback`
+ * node) when nothing loads.
  * Uses next/image (unoptimized — these are tiny hot-linked SVGs) so the
  * Image component handles layout, lazy-loading and error fallback.
  */
@@ -19,6 +20,7 @@ export function BrandLogo({
   chip = false,
   rounded = "full",
   className,
+  fallback,
 }: {
   urls?: string[];
   slug?: string;
@@ -28,6 +30,8 @@ export function BrandLogo({
   chip?: boolean;
   rounded?: "full" | "md" | "none";
   className?: string;
+  /** Node kustom saat semua URL gagal dimuat (menggantikan tile inisial). */
+  fallback?: ReactNode;
 }) {
   const all = [...urls];
   if (slug) all.push(`https://cdn.simpleicons.org/${slug}/${color.replace("#", "")}`);
@@ -35,6 +39,7 @@ export function BrandLogo({
   const [failedAll, setFailedAll] = useState(false);
 
   if (idx >= all.length || failedAll) {
+    if (fallback) return <>{fallback}</>;
     return (
       <span
         className={cn(

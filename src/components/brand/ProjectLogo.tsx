@@ -1,20 +1,29 @@
-import { projectGradient } from "@/lib/brand";
+"use client";
 
-export function ProjectLogo({
+import { projectGradient, projectBrandUrls, projectBrandColor } from "@/lib/brand";
+import { BrandLogo } from "./BrandLogo";
+import { cn } from "@/lib/utils/helpers";
+
+/**
+ * Monogram gradient (tampilan lama) — dipakai sebagai fallback terakhir
+ * bila slug tidak dikenal DAN semua URL logo gagal dimuat.
+ */
+function ProjectMonogram({
   symbol,
   slug,
-  size = 44,
-  radius = 12,
+  size,
+  radius,
   className,
 }: {
   symbol: string;
   slug: string;
-  size?: number;
-  radius?: number;
+  size: number;
+  radius: number;
   className?: string;
 }) {
   const g = projectGradient(slug);
   const id = `pg-${slug}`;
+  const text = (symbol || slug || "?").slice(0, 3).toUpperCase();
   return (
     <svg
       width={size}
@@ -22,7 +31,7 @@ export function ProjectLogo({
       viewBox="0 0 48 48"
       className={className}
       role="img"
-      aria-label={`${symbol} logo`}
+      aria-label={`${symbol || slug} logo`}
     >
       <defs>
         <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
@@ -48,9 +57,51 @@ export function ProjectLogo({
         fontWeight="800"
         fill="#fff"
       >
-        {symbol.slice(0, 3)}
+        {text}
       </text>
       <circle cx="40" cy="8" r="2.5" fill="#fff" opacity="0.55" />
     </svg>
+  );
+}
+
+/**
+ * Logo project RESMI: mencoba daftar logo brand asli ({@link projectBrandUrls})
+ * berurutan — cryptologos/brand kit → ikon chain DefiLlama → monogram
+ * gradient sebagai fallback. Slug yang belum terdaftar tetap mendapat kandidat
+ * ikon DefiLlama, jadi project baru di Supabase otomatis menampilkan logo
+ * real-nya bila tersedia.
+ */
+export function ProjectLogo({
+  symbol,
+  slug,
+  size = 44,
+  radius = 12,
+  className,
+}: {
+  symbol: string;
+  slug: string;
+  size?: number;
+  radius?: number;
+  className?: string;
+}) {
+  const label = symbol || slug || "?";
+  return (
+    <BrandLogo
+      urls={projectBrandUrls(slug)}
+      color={projectBrandColor(slug)}
+      size={size}
+      rounded="md"
+      initials={label.slice(0, 3).toUpperCase()}
+      className={cn("border border-border/60 bg-card shadow-sm", className)}
+      fallback={
+        <ProjectMonogram
+          symbol={label}
+          slug={slug}
+          size={size}
+          radius={radius}
+          className={className}
+        />
+      }
+    />
   );
 }
