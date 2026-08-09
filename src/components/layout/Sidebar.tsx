@@ -12,6 +12,7 @@ import {
   LayoutGrid,
   Network,
   Radar,
+  ScrollText,
   Settings,
   Users,
   Zap,
@@ -44,6 +45,7 @@ export function Sidebar() {
   const workspaceNav = [
     { href: "/", label: "Projects", icon: LayoutGrid, match: (p: string) => p === "/" || p.startsWith("/project") },
     { href: "/compare", label: "Compare", icon: GitCompareArrows, match: (p: string) => p.startsWith("/compare") },
+    { href: "/activity", label: "Activity", icon: ScrollText, match: (p: string) => p.startsWith("/activity") },
     { href: "/settings", label: "Settings", icon: Settings, match: (p: string) => p.startsWith("/settings") },
   ];
 

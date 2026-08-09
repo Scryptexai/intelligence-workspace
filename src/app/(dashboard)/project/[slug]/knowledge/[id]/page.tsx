@@ -9,14 +9,20 @@ import {
   Lightbulb,
   UserRound,
 } from "lucide-react";
-import { projectRepository, knowledgeRepository, eventRepository } from "@/lib/api/server";
+import { projectRepository, knowledgeRepository, eventRepository, lineageRepository } from "@/lib/api/server";
 import { getProjects, getKnowledge } from "@/lib/data";
+import { idMatches } from "@/lib/types/lineage";
 import { EvidenceTrace } from "@/components/knowledge/EvidenceTrace";
 import { KnowledgeCard } from "@/components/project/KnowledgeCard";
 import { ConfidenceGauge } from "@/components/knowledge/ConfidenceGauge";
 import { ReadingModeShell } from "@/components/knowledge/ReadingModeShell";
 import { MarkdownCopyButton } from "@/components/export/MarkdownCopyButton";
 import { PrivateNote } from "@/components/notes/PrivateNote";
+import { RowHistory } from "@/components/activity/RowHistory";
+import { AuditStamp } from "@/components/activity/AuditStamp";
+import { ImpactPanel } from "@/components/knowledge/ImpactPanel";
+import { ProvenanceCard } from "@/components/knowledge/ProvenanceCard";
+import { fingerprintId } from "@/lib/utils/fingerprint";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -43,11 +49,12 @@ export default async function KnowledgeDetailPage({
   params: Promise<{ slug: string; id: string }>;
 }) {
   const { slug, id } = await params;
-  const [project, item, all, events] = await Promise.all([
+  const [project, item, all, events, impact] = await Promise.all([
     projectRepository.get(slug),
     knowledgeRepository.get(slug, id),
     knowledgeRepository.list(slug),
     eventRepository.list(slug),
+    lineageRepository.getImpact(slug, id),
   ]);
   if (!project) notFound();
   if (!item) notFound();
@@ -55,9 +62,10 @@ export default async function KnowledgeDetailPage({
   const related = item.relatedKnowledge
     .map((kid) => all.find((k) => k.id === kid))
     .filter((k): k is NonNullable<typeof k> => Boolean(k));
-  const dependencyEvents = item.dependencies
-    .map((eid) => events.find((e) => e.id === eid))
-    .filter((e): e is NonNullable<typeof e> => Boolean(e));
+  // Data produksi memakai referensi id pendek ("EV-013") pada dependencies
+  // sementara id event penuh ("arbitrum-EV-013") → cocokkan dengan idMatches.
+  const dependencyEvents = events
+    .filter((e) => item.dependencies.some((eid) => idMatches(eid, e.id)));
 
   return (
     <div className="space-y-5">
@@ -79,6 +87,12 @@ export default async function KnowledgeDetailPage({
                 {item.category}
               </Badge>
               <span className="font-mono text-[11px] text-muted-foreground/60">ID: {item.id}</span>
+              <span
+                className="font-mono text-[11px] font-bold text-primary/80"
+                title="Data fingerprint (hash deterministik)"
+              >
+                {fingerprintId(item.id)}
+              </span>
               <MarkdownCopyButton
                 content={buildKnowledgeMarkdown(item, slug)}
                 label="Copy"
@@ -227,6 +241,9 @@ export default async function KnowledgeDetailPage({
               </CardContent>
             </Card>
 
+            {/* provenance — asal-usul data point (Fase 1) */}
+            <ProvenanceCard provenance={item.provenance} />
+
             {/* dependencies */}
             <Card>
               <CardContent className="p-4">
@@ -305,6 +322,15 @@ export default async function KnowledgeDetailPage({
         </h2>
         <EvidenceTrace evidence={item.evidence} />
       </div>
+
+      {/* impact analysis — kalau item ini diubah, apa yang terpengaruh (Fase 1) */}
+      <ImpactPanel impact={impact} />
+
+      {/* audit trail per baris — riwayat setiap perubahan knowledge item ini */}
+      <RowHistory table="knowledge_items" rowId={item.id} />
+
+      {/* sticky audit trail — "last verified" */}
+      <AuditStamp table="knowledge_items" rowId={item.id} />
 
       <PrivateNote slug={slug} id={item.id} title={`Private Note — ${item.id}`} />
     </div>

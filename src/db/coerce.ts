@@ -64,3 +64,49 @@ export function asStringRecord(v: unknown): Record<string, string> {
   }
   return out;
 }
+
+/** Objek JSON apa pun → Record<string,unknown>; selain itu null (tidak melempar). */
+export function asJsonObject(v: unknown): Record<string, unknown> | null {
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    return v as Record<string, unknown>;
+  }
+  return null;
+}
+
+/** Teks nullable — string non-kosong → nilai; null/undefined → null. */
+export function asNullableText(v: unknown): string | null {
+  return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+/** boolean dari bentuk apa pun — jatuh ke `dflt` bila tidak bisa dipastikan. */
+export function asBoolean(v: unknown, dflt = false): boolean {
+  if (typeof v === "boolean") return v;
+  if (v === "true" || v === 1 || v === "1") return true;
+  if (v === "false" || v === 0 || v === "0") return false;
+  return dflt;
+}
+
+/**
+ * Bangun DataProvenance dari kolom provenance mentah (nullable).
+ * `hasProvenance` true bila minimal satu kolom terisi — dipakai UI untuk
+ * memutuskan menampilkan provenance atau fallback "tidak tercatat".
+ * Tidak pernah melempar.
+ */
+export function buildProvenance(
+  source: unknown,
+  sourceUrl: unknown,
+  connector: unknown,
+  ingestedAt: unknown
+): import("@/lib/types/lineage").DataProvenance {
+  const s = asText(source);
+  const u = asText(sourceUrl);
+  const c = asText(connector);
+  const i = asText(ingestedAt);
+  return {
+    source: s,
+    sourceUrl: u,
+    connector: c,
+    ingestedAt: i,
+    hasProvenance: Boolean(s || u || c || i),
+  };
+}

@@ -23,6 +23,8 @@ import type { QAReport, BehaviorProfile } from "@/lib/types/project";
 import type { MarketData } from "@/lib/types/market";
 import type { SearchResult } from "@/lib/data";
 import type { SavedView } from "@/lib/types/view";
+import type { ActivityEntry, ActivityFilters } from "@/lib/types/activity";
+import type { MemberRole, Workspace, WorkspaceMember } from "@/lib/types/workspace";
 
 /** Mode diputuskan LIVE (bukan build-time) agar auto-detect /api/config berfungsi. */
 const isMockMode = (): boolean => effectiveDataSource() === "mock";
@@ -191,5 +193,53 @@ export const viewRepository = {
     return isMockMode()
       ? mockAdapter.removeView(id, scope)
       : http.delete<SavedView[]>(`${ENDPOINTS.view(id)}?scope=${encodeURIComponent(scope)}`);
+  },
+};
+
+/**
+ * Activity ledger — data riil HANYA dari /api/activity (server → audit_log).
+ * Mode mock sengaja mengembalikan [] (bukan data palsu); empty-state di UI
+ * adalah perilaku yang benar.
+ */
+export const activityRepository = {
+  list(filters?: ActivityFilters): Promise<ActivityEntry[]> {
+    return isMockMode()
+      ? mockAdapter.listActivity(filters)
+      : apiGet<ActivityEntry[]>(ENDPOINTS.activity, {
+          table: filters?.table,
+          action: filters?.action,
+          rowId: filters?.rowId,
+          limit: filters?.limit,
+        }).then((r) => r.data);
+  },
+};
+
+/**
+ * Workspace & RBAC — data riil HANYA dari server (→ Supabase service key).
+ * Mode mock: baca → [] (empty-state); tulis → tolak dengan pesan jelas
+ * (bukan fake data).
+ */
+export const workspaceRepository = {
+  listWorkspaces(): Promise<Workspace[]> {
+    return isMockMode()
+      ? mockAdapter.listWorkspaces()
+      : apiGet<Workspace[]>(ENDPOINTS.workspaces).then((r) => r.data);
+  },
+  listMembers(workspaceId: string): Promise<WorkspaceMember[]> {
+    return isMockMode()
+      ? mockAdapter.listWorkspaceMembers(workspaceId)
+      : apiGet<WorkspaceMember[]>(ENDPOINTS.workspaceMembers(workspaceId)).then((r) => r.data);
+  },
+  addMember(workspaceId: string, userId: string, role: MemberRole): Promise<void> {
+    if (isMockMode()) return mockAdapter.addWorkspaceMember(workspaceId, userId, role);
+    return http.post<void>(ENDPOINTS.workspaceMembers(workspaceId), { userId, role });
+  },
+  updateRole(workspaceId: string, userId: string, role: MemberRole): Promise<void> {
+    if (isMockMode()) return mockAdapter.updateMemberRole(workspaceId, userId, role);
+    return http.patch<void>(ENDPOINTS.workspaceMember(workspaceId, userId), { role });
+  },
+  removeMember(workspaceId: string, userId: string): Promise<void> {
+    if (isMockMode()) return mockAdapter.removeWorkspaceMember(workspaceId, userId);
+    return http.delete<void>(ENDPOINTS.workspaceMember(workspaceId, userId));
   },
 };

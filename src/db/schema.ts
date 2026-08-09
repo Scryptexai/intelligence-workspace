@@ -15,11 +15,14 @@ import {
   pgTable,
   text,
   integer,
+  bigint,
   doublePrecision,
   boolean,
   timestamp,
   jsonb,
   date,
+  uuid,
+  primaryKey,
   uniqueIndex,
   index,
 } from "drizzle-orm/pg-core";
@@ -333,6 +336,65 @@ export const users = pgTable(
 /* Tipe ekspor (supaya impor dari aplikasi lebih mudah)                */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/* 14. WORKSPACES & WORKSPACE_MEMBERS (Phase 0 — multi-tenant/RBAC)     */
+/* ------------------------------------------------------------------ */
+
+export const workspaces = pgTable(
+  "workspaces",
+  {
+    id: uuid("id").primaryKey(),
+    name: text("name").notNull(),
+    slug: text("slug").unique(),
+    description: text("description"),
+    settings: jsonb("settings").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("workspaces_slug_idx").on(t.slug)]
+);
+
+export const workspaceMembers = pgTable(
+  "workspace_members",
+  {
+    workspaceId: uuid("workspace_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    role: text("role").notNull().default("viewer"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.workspaceId, t.userId] })]
+);
+
+/* ------------------------------------------------------------------ */
+/* 15. AUDIT LOG (Phase 0 — append-only, diisi trigger cif_audit_row)   */
+/* ------------------------------------------------------------------ */
+
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey(),
+    tableName: text("table_name").notNull(),
+    rowId: text("row_id"),
+    action: text("action").notNull(), // INSERT | UPDATE | DELETE
+    oldData: jsonb("old_data").$type<Record<string, unknown> | null>(),
+    newData: jsonb("new_data").$type<Record<string, unknown> | null>(),
+    changedFields: jsonb("changed_fields").$type<string[]>().default([]),
+    actorLabel: text("actor_label"),
+    actorId: text("actor_id"),
+    workspaceId: text("workspace_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("audit_log_table_idx").on(t.tableName),
+    index("audit_log_row_idx").on(t.rowId),
+    index("audit_log_created_idx").on(t.createdAt),
+  ]
+);
+
+/* ------------------------------------------------------------------ */
+/* Tipe ekspor (supaya impor dari aplikasi lebih mudah)                */
+/* ------------------------------------------------------------------ */
+
 export type ProjectRow = typeof projects.$inferSelect;
 export type KnowledgeRow = typeof knowledgeItems.$inferSelect;
 export type EvidenceRow = typeof evidenceItems.$inferSelect;
@@ -346,3 +408,6 @@ export type BehaviorRow = typeof behaviorProfiles.$inferSelect;
 export type NoteRow = typeof notes.$inferSelect;
 export type SavedViewRow = typeof savedViews.$inferSelect;
 export type UserRow = typeof users.$inferSelect;
+export type AuditLogRow = typeof auditLog.$inferSelect;
+export type WorkspaceRow = typeof workspaces.$inferSelect;
+export type WorkspaceMemberRow = typeof workspaceMembers.$inferSelect;

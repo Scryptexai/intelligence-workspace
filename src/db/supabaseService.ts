@@ -23,12 +23,24 @@ import type { TimelineEvent } from "@/lib/types/event";
 import type { Conflict } from "@/lib/types/conflict";
 import type { SavedView } from "@/lib/types/view";
 import type { SearchResult } from "@/lib/data";
+import type { ActivityAction, ActivityEntry, ActivityFilters } from "@/lib/types/activity";
+import type {
+  KnowledgeImpact,
+  LineageRef,
+} from "@/lib/types/lineage";
+import { idMatches } from "@/lib/types/lineage";
+import type { MemberRole, Workspace, WorkspaceMember } from "@/lib/types/workspace";
+import { MEMBER_ROLES } from "@/lib/types/workspace";
+import { mapWithConcurrency } from "@/lib/utils/helpers";
 import {
   asConflictVersion,
+  asJsonObject,
+  asNullableText,
   asNumber,
   asStringArray,
   asStringRecord,
   asText,
+  buildProvenance,
 } from "./coerce";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
@@ -40,19 +52,35 @@ export const supabaseRestEnabled = Boolean(SUPABASE_URL && SECRET_KEY);
 /* HTTP helper                                                         */
 /* ------------------------------------------------------------------ */
 
-async function getRows<T>(path: string): Promise<T[]> {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    headers: {
-      apikey: SECRET_KEY!,
-      Authorization: `Bearer ${SECRET_KEY!}`,
-    },
-    // no-store: hindari Data Cache Next.js — data bisa berubah via /api/seed
-    // atau pipeline CIF; cache stale (mis. [] sebelum seed) bikin UI kosong
-    // hingga 30 detik. Layer di atas (s-maxage header) tetap mengatur cache CDN.
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(`Supabase REST ${res.status}: ${path}`);
-  return (await res.json()) as T[];
+/**
+ * GET baris dari PostgREST dengan TIMEOUT wajib (AbortController).
+ *
+ * Tanpa timeout, satu fetch yang menggantung (jaringan lambat / Supabase
+ * cold start / DNS) bisa menahan request serverless Vercel melewati batas
+ * durasi fungsi (Hobby 10s) → halaman RSC jatuh ke error boundary
+ * ("Something went wrong"). Timeout membuat fetch gagal cepat → fallback
+ * data kosong di layer atas, halaman tetap ter-render.
+ */
+async function getRows<T>(path: string, timeoutMs = 5000): Promise<T[]> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      headers: {
+        apikey: SECRET_KEY!,
+        Authorization: `Bearer ${SECRET_KEY!}`,
+      },
+      // no-store: hindari Data Cache Next.js — data bisa berubah via /api/seed
+      // atau pipeline CIF; cache stale (mis. [] sebelum seed) bikin UI kosong
+      // hingga 30 detik. Layer di atas (s-maxage header) tetap mengatur cache CDN.
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`Supabase REST ${res.status}: ${path}`);
+    return (await res.json()) as T[];
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function getOne<T>(path: string): Promise<T | undefined> {
@@ -186,6 +214,12 @@ interface RawKnowledge {
   author: string | null;
   related_knowledge: string[] | null;
   dependencies: string[] | null;
+  /* kolom provenance (additive — ada setelah migrasi Phase 0) */
+  workspace_id?: string | null;
+  source?: string | null;
+  source_url?: string | null;
+  connector?: string | null;
+  ingested_at?: string | null;
 }
 
 interface RawEvidence {
@@ -234,6 +268,7 @@ function mapKnowledge(k: RawKnowledge, evs: RawEvidence[]): KnowledgeItem {
     })),
     relatedKnowledge: asStringArray(k.related_knowledge),
     dependencies: asStringArray(k.dependencies),
+    provenance: buildProvenance(k.source, k.source_url, k.connector, k.ingested_at),
   };
 }
 
@@ -354,15 +389,91 @@ function mapConflict(c: RawConflict): Conflict {
 }
 
 /* ------------------------------------------------------------------ */
+/* Mapper: activity ledger (audit_log)                                 */
+/* ------------------------------------------------------------------ */
+
+/** Baris mentah audit_log (snake_case dari PostgREST). */
+export interface RawAuditLog {
+  id: number;
+  table_name: string;
+  row_id: string | null;
+  action: string;
+  old_data: unknown;
+  new_data: unknown;
+  changed_fields: unknown;
+  actor_label: string | null;
+  actor_id: string | null;
+  workspace_id: string | null;
+  created_at: string;
+}
+
+const ACTIVITY_ACTIONS: ActivityAction[] = ["INSERT", "UPDATE", "DELETE"];
+
+/**
+ * Nama field yang nilainya berbeda antara dua snapshot baris (old vs new).
+ * Tidak pernah melempar: JSONB apa pun (objek/string/null) diterima.
+ */
+export function changedFieldsBetween(
+  oldData: unknown,
+  newData: unknown
+): string[] {
+  const o = asJsonObject(oldData);
+  const n = asJsonObject(newData);
+  if (!o && !n) return [];
+  if (!o) return Object.keys(n ?? {});
+  if (!n) return Object.keys(o);
+  const keys = new Set([...Object.keys(o), ...Object.keys(n)]);
+  const changed: string[] = [];
+  for (const k of keys) {
+    const a = o[k];
+    const b = n[k];
+    const same =
+      a === b ||
+      (a !== undefined && b !== undefined && JSON.stringify(a) === JSON.stringify(b));
+    if (!same) changed.push(k);
+  }
+  return changed.sort();
+}
+
+/** Baris audit_log (snake_case) → ActivityEntry aplikasi. Tidak pernah melempar. */
+export function mapActivityEntry(row: RawAuditLog): ActivityEntry {
+  const action: ActivityAction = ACTIVITY_ACTIONS.includes(
+    row.action as ActivityAction
+  )
+    ? (row.action as ActivityAction)
+    : "UPDATE";
+  const oldData = asJsonObject(row.old_data);
+  const newData = asJsonObject(row.new_data);
+  const changedFromTrigger = asStringArray(row.changed_fields);
+  return {
+    id: asNumber(row.id),
+    tableName: asText(row.table_name, "unknown"),
+    rowId: asNullableText(row.row_id),
+    action,
+    oldData,
+    newData,
+    changedFields:
+      changedFromTrigger.length > 0
+        ? changedFromTrigger
+        : changedFieldsBetween(oldData, newData),
+    actorLabel: asText(row.actor_label, "system") || "system",
+    actorId: asText(row.actor_id, "system") || "system",
+    workspaceId: asNullableText(row.workspace_id),
+    createdAt: asText(row.created_at),
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* Public API                                                          */
 /* ------------------------------------------------------------------ */
 
 export const supabaseRest = {
   async listProjects(): Promise<Project[]> {
     const rows = await getRows<RawProject>(`projects?select=*`);
-    const out: Project[] = [];
-    for (const p of rows) out.push(await buildProject(p));
-    return out;
+    // Paralel dengan concurrency terbatas — 29 project × 3 query = ~87 request
+    // SEQUENTIAL bisa 15-30s (timeout serverless Vercel → error page).
+    // Concurrency 12 → 3 gelombang, total ~latency jaringan sekali jalan.
+    return mapWithConcurrency(rows, 12, (p) => buildProject(p));
   },
 
   async getProject(slug: string): Promise<Project | undefined> {
@@ -455,7 +566,7 @@ export const supabaseRest = {
         confidence: p.confidence,
       });
     }
-    for (const p of projects) {
+    await mapWithConcurrency(projects, 6, async (p) => {
       const [kn, ent, evs, cfs] = await Promise.all([
         this.listKnowledge(p.slug).catch(() => [] as KnowledgeItem[]),
         this.listEntities(p.slug).catch(() => [] as Entity[]),
@@ -474,8 +585,187 @@ export const supabaseRest = {
       cfs.forEach((c) =>
         push({ category: "Conflict", label: c.title, sublabel: `${c.id} · ${c.severity} · ${c.status}`, href: `/project/${p.slug}/conflicts/${c.id}`, keywords: `${c.id} ${c.title} ${c.category} ${c.description}`.toLowerCase(), status: c.status, severity: c.severity, domain: c.category })
       );
-    }
+    });
     return results.slice(0, 40);
+  },
+
+  /* ------------------------------------------------------------------ */
+  /* Data lineage & impact analysis (Fase 1)                             */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * Impact analysis untuk satu knowledge item: siapa yang mereferensikan,
+   * event/conflict mana yang menyentuh, dependensi event, dan jumlah
+   * evidence. 4 query konstan (knowledge + events + conflicts + evidence)
+   * lalu filter di memori — tanpa N+1. Referensi id pendek ("K-002",
+   * "EV-013") dicocokkan dengan id penuh ("arbitrum-K-002") via idMatches.
+   */
+  async getKnowledgeImpact(slug: string, id: string): Promise<KnowledgeImpact | undefined> {
+    const s = encodeURIComponent(slug);
+    const [knRows, evRows, cfRows, evCountRows] = await Promise.all([
+      getRows<RawKnowledge>(`knowledge_items?project_slug=eq.${s}&select=*`),
+      getRows<RawEvent>(`events?project_slug=eq.${s}&select=*`),
+      getRows<RawConflict>(`conflicts?project_slug=eq.${s}&select=*`),
+      getRows<{ id: string }>(
+        `evidence_items?knowledge_id=eq.${encodeURIComponent(id)}&select=id`
+      ),
+    ]);
+
+    const item = knRows.find((k) => k.id === id);
+    if (!item) return undefined;
+
+    const referencedBy: LineageRef[] = [];
+    for (const k of knRows) {
+      if (k.id === id) continue;
+      const rel = asStringArray(k.related_knowledge).some((r) => idMatches(r, id));
+      const dep = asStringArray(k.dependencies).some((d) => idMatches(d, id));
+      if (rel || dep) {
+        referencedBy.push({
+          id: k.id,
+          name: asText(k.name, k.id),
+          kind: "knowledge",
+          href: `/project/${slug}/knowledge/${k.id}`,
+          meta: asText(k.category) || undefined,
+        });
+      }
+    }
+
+    const eventsTouching: LineageRef[] = evRows
+      .filter((e) => asStringArray(e.affected_knowledge).some((a) => idMatches(a, id)))
+      .map((e) => ({
+        id: e.id,
+        name: asText(e.name, e.id),
+        kind: "event",
+        href: `/project/${slug}/timeline?event=${e.id}`,
+        meta: asText(e.type) || undefined,
+      }));
+
+    const conflictsTouching: LineageRef[] = cfRows
+      .filter((c) => asStringArray(c.affected_knowledge).some((a) => idMatches(a, id)))
+      .map((c) => ({
+        id: c.id,
+        name: asText(c.title, c.id),
+        kind: "conflict",
+        href: `/project/${slug}/conflicts/${c.id}`,
+        meta: asText(c.status) || undefined,
+      }));
+
+    const depIds = asStringArray(item.dependencies);
+    const dependencyEvents: LineageRef[] = evRows
+      .filter((e) => depIds.some((d) => idMatches(d, e.id)))
+      .map((e) => ({
+        id: e.id,
+        name: asText(e.name, e.id),
+        kind: "event",
+        href: `/project/${slug}/timeline?event=${e.id}`,
+        meta: asText(e.type) || undefined,
+      }));
+
+    return {
+      knowledgeId: id,
+      projectSlug: slug,
+      referencedBy,
+      eventsTouching,
+      conflictsTouching,
+      dependencyEvents,
+      evidenceCount: evCountRows.length,
+      generatedAt: new Date().toISOString(),
+    };
+  },
+
+  /* ------------------------------------------------------------------ */
+  /* Workspace & RBAC (Fase 2) — baca/kelola via service key             */
+  /* ------------------------------------------------------------------ */
+
+  /** Daftar workspace (REST; tabel belum ada → [] — pre-migrasi aman). */
+  async listWorkspaces(): Promise<Workspace[]> {
+    try {
+      const rows = await getRows<{
+        id: string; name: string; slug: string | null;
+        description: string | null; settings: unknown; created_at: string;
+      }>(`workspaces?select=*&order=created_at`);
+      return rows.map((w) => ({
+        id: asText(w.id),
+        name: asText(w.name, w.id),
+        slug: asText(w.slug),
+        description: asText(w.description),
+        settings: asJsonObject(w.settings) ?? {},
+        createdAt: asText(w.created_at),
+      }));
+    } catch {
+      return [];
+    }
+  },
+
+  /** Daftar anggota workspace (opsional difilter per workspace). */
+  async listWorkspaceMembers(workspaceId?: string): Promise<WorkspaceMember[]> {
+    try {
+      const cond = workspaceId ? `workspace_id=eq.${encodeURIComponent(workspaceId)}&` : "";
+      const rows = await getRows<{
+        workspace_id: string; user_id: string; role: string; created_at: string;
+      }>(`workspace_members?${cond}select=*&order=created_at`);
+      return rows.map((m) => ({
+        workspaceId: asText(m.workspace_id),
+        userId: asText(m.user_id),
+        role: (MEMBER_ROLES as readonly string[]).includes(m.role)
+          ? (m.role as MemberRole)
+          : "viewer",
+        createdAt: asText(m.created_at),
+      }));
+    } catch {
+      return [];
+    }
+  },
+
+  /** Tambah anggota (POST workspace_members, service key). */
+  async addWorkspaceMember(workspaceId: string, userId: string, role: MemberRole): Promise<void> {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/workspace_members`, {
+      method: "POST",
+      headers: {
+        apikey: SECRET_KEY!,
+        Authorization: `Bearer ${SECRET_KEY!}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({ workspace_id: workspaceId, user_id: userId, role }),
+    });
+    if (!res.ok && res.status !== 201) {
+      throw new Error(`addWorkspaceMember gagal: HTTP ${res.status}`);
+    }
+  },
+
+  /** Ubah role anggota (PATCH, service key). */
+  async updateMemberRole(workspaceId: string, userId: string, role: MemberRole): Promise<void> {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/workspace_members?workspace_id=eq.${encodeURIComponent(workspaceId)}&user_id=eq.${encodeURIComponent(userId)}`,
+      {
+        method: "PATCH",
+        headers: {
+          apikey: SECRET_KEY!,
+          Authorization: `Bearer ${SECRET_KEY!}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+        },
+        body: JSON.stringify({ role }),
+      }
+    );
+    if (!res.ok && res.status !== 204) {
+      throw new Error(`updateMemberRole gagal: HTTP ${res.status}`);
+    }
+  },
+
+  /** Hapus anggota (DELETE, service key). */
+  async removeWorkspaceMember(workspaceId: string, userId: string): Promise<void> {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/workspace_members?workspace_id=eq.${encodeURIComponent(workspaceId)}&user_id=eq.${encodeURIComponent(userId)}`,
+      {
+        method: "DELETE",
+        headers: { apikey: SECRET_KEY!, Authorization: `Bearer ${SECRET_KEY!}` },
+      }
+    );
+    if (!res.ok && res.status !== 204) {
+      throw new Error(`removeWorkspaceMember gagal: HTTP ${res.status}`);
+    }
   },
 
   /** Uji koneksi: query tabel `projects`. */
@@ -592,5 +882,26 @@ export const supabaseRest = {
       throw new Error(`deleteView gagal: HTTP ${res.status}`);
     }
     return this.listViews(scope);
+  },
+
+  /* ------------------------------------------------------------------ */
+  /* Activity ledger (audit_log) — server-only read                      */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * Baca ledger audit. Selalu baru → descending (terbaru dulu).
+   * Filter opsional: tabel / aksi / row_id. Limit dijepit 1..200.
+   */
+  async listActivity(filters: ActivityFilters = {}, limit = 50): Promise<ActivityEntry[]> {
+    const conds: string[] = [];
+    if (filters.table) conds.push(`table_name=eq.${encodeURIComponent(filters.table)}`);
+    if (filters.action) conds.push(`action=eq.${encodeURIComponent(filters.action)}`);
+    if (filters.rowId) conds.push(`row_id=eq.${encodeURIComponent(filters.rowId)}`);
+    const safeLimit = Math.min(Math.max(Math.floor(limit), 1), 200);
+    const qs = conds.length > 0 ? `${conds.join("&")}&` : "";
+    const rows = await getRows<RawAuditLog>(
+      `audit_log?${qs}select=*&order=created_at.desc&limit=${safeLimit}`
+    );
+    return rows.map(mapActivityEntry);
   },
 };

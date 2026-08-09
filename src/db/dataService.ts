@@ -22,6 +22,9 @@ import {
   qaDimensions,
   qaPhases,
   behaviorProfiles,
+  auditLog as auditLogTable,
+  workspaces as workspacesTable,
+  workspaceMembers as workspaceMembersTable,
 } from "./schema";
 import {
   getProjects as getMockProjects,
@@ -45,8 +48,46 @@ import type { TimelineEvent } from "@/lib/types/event";
 import type { Conflict } from "@/lib/types/conflict";
 import type { SearchResult } from "@/lib/data";
 import type { ListParams } from "@/lib/api/types";
-import { supabaseRest, supabaseRestEnabled } from "./supabaseService";
-import { asConflictVersion, asStringArray, asStringRecord } from "./coerce";
+import type { ActivityAction, ActivityEntry, ActivityFilters } from "@/lib/types/activity";
+import type { KnowledgeImpact, LineageRef } from "@/lib/types/lineage";
+import { idMatches } from "@/lib/types/lineage";
+import type { MemberRole, Workspace, WorkspaceMember } from "@/lib/types/workspace";
+import { MEMBER_ROLES } from "@/lib/types/workspace";
+import { supabaseRest, supabaseRestEnabled, changedFieldsBetween } from "./supabaseService";
+import {
+  asConflictVersion,
+  asJsonObject,
+  asStringArray,
+  asStringRecord,
+  asText,
+  buildProvenance,
+} from "./coerce";
+
+const ACTIVITY_ACTIONS: ActivityAction[] = ["INSERT", "UPDATE", "DELETE"];
+
+/** Baris audit_log via pg (camelCase) → ActivityEntry. Tidak pernah melempar. */
+function pgRowToActivity(row: typeof auditLogTable.$inferSelect): ActivityEntry {
+  const oldData = asJsonObject(row.oldData);
+  const newData = asJsonObject(row.newData);
+  return {
+    id: Number(row.id),
+    tableName: asText(row.tableName, "unknown"),
+    rowId: row.rowId ?? null,
+    action: ACTIVITY_ACTIONS.includes(row.action as ActivityAction)
+      ? (row.action as ActivityAction)
+      : "UPDATE",
+    oldData,
+    newData,
+    changedFields:
+      Array.isArray(row.changedFields) && row.changedFields.length > 0
+        ? row.changedFields
+        : changedFieldsBetween(oldData, newData),
+    actorLabel: asText(row.actorLabel, "system") || "system",
+    actorId: asText(row.actorId, "system") || "system",
+    workspaceId: row.workspaceId ?? null,
+    createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : "",
+  };
+}
 
 const DB = isDbConfigured();
 /** Prioritas sumber: Supabase REST (cif_datasets) → pg pool → mock. */
@@ -310,6 +351,102 @@ export async function dbGetKnowledgeItem(
 }
 
 /* ══════════════════════════════════════════════════════════════════ */
+/* Data lineage & impact analysis (Fase 1)                            */
+/* ══════════════════════════════════════════════════════════════════ */
+
+/**
+ * Impact analysis untuk satu knowledge item. Prioritas sumber: Supabase REST
+ * → pg (DATABASE_URL) → undefined (halaman fallback ke empty-state).
+ * Referensi id pendek ("K-002", "EV-013") dicocokkan dengan id penuh
+ * ("arbitrum-K-002") — data produksi memakai id pendek pada
+ * related_knowledge/dependencies/affected_knowledge.
+ */
+export async function dbGetKnowledgeImpact(
+  slug: string,
+  id: string
+): Promise<KnowledgeImpact | undefined> {
+  if (REST) {
+    try {
+      const r = await supabaseRest.getKnowledgeImpact(slug, id);
+      if (r) return r;
+    } catch {
+      /* lanjut ke pg */
+    }
+  }
+  if (!db) return undefined;
+  try {
+    const [kn, evs, cfs, evRows] = await Promise.all([
+      db.select().from(knowledgeItems).where(eq(knowledgeItems.projectSlug, slug)),
+      db.select().from(eventsTable).where(eq(eventsTable.projectSlug, slug)),
+      db.select().from(conflictsTable).where(eq(conflictsTable.projectSlug, slug)),
+      db.select({ id: evidenceItems.id }).from(evidenceItems).where(eq(evidenceItems.knowledgeId, id)),
+    ]);
+    const item = kn.find((k) => k.id === id);
+    if (!item) return undefined;
+
+    const referencedBy: LineageRef[] = [];
+    for (const k of kn) {
+      if (k.id === id) continue;
+      const rel = asStringArray(k.relatedKnowledge).some((r) => idMatches(r, id));
+      const dep = asStringArray(k.dependencies).some((d) => idMatches(d, id));
+      if (rel || dep) {
+        referencedBy.push({
+          id: k.id,
+          name: asText(k.name, k.id),
+          kind: "knowledge",
+          href: `/project/${slug}/knowledge/${k.id}`,
+          meta: asText(k.category) || undefined,
+        });
+      }
+    }
+
+    const eventsTouching: LineageRef[] = evs
+      .filter((e) => asStringArray(e.affectedKnowledge).some((a) => idMatches(a, id)))
+      .map((e) => ({
+        id: e.id,
+        name: asText(e.name, e.id),
+        kind: "event",
+        href: `/project/${slug}/timeline?event=${e.id}`,
+        meta: asText(e.type) || undefined,
+      }));
+
+    const conflictsTouching: LineageRef[] = cfs
+      .filter((c) => asStringArray(c.affectedKnowledge).some((a) => idMatches(a, id)))
+      .map((c) => ({
+        id: c.id,
+        name: asText(c.title, c.id),
+        kind: "conflict",
+        href: `/project/${slug}/conflicts/${c.id}`,
+        meta: asText(c.status) || undefined,
+      }));
+
+    const depIds = asStringArray(item.dependencies);
+    const dependencyEvents: LineageRef[] = evs
+      .filter((e) => depIds.some((d) => idMatches(d, e.id)))
+      .map((e) => ({
+        id: e.id,
+        name: asText(e.name, e.id),
+        kind: "event",
+        href: `/project/${slug}/timeline?event=${e.id}`,
+        meta: asText(e.type) || undefined,
+      }));
+
+    return {
+      knowledgeId: id,
+      projectSlug: slug,
+      referencedBy,
+      eventsTouching,
+      conflictsTouching,
+      dependencyEvents,
+      evidenceCount: evRows.length,
+      generatedAt: new Date().toISOString(),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════ */
 /* Entities & relationships                                           */
 /* ══════════════════════════════════════════════════════════════════ */
 
@@ -566,6 +703,133 @@ export async function dbGetBehavior(slug: string): Promise<BehaviorProfile | und
   } catch {
     return behaviorMock[slug];
   }
+}
+
+/* ══════════════════════════════════════════════════════════════════ */
+/* Activity ledger (audit_log)                                        */
+/* ══════════════════════════════════════════════════════════════════ */
+
+/**
+ * Baca ledger audit (terbaru dulu). Prioritas sumber sama dengan data lain:
+ * Supabase REST → pg (DATABASE_URL) → kosong (bukan mock — audit hanya berisi
+ * data riil dari trigger Postgres). Filter: table/action/rowId + limit.
+ */
+export async function dbListActivity(
+  filters: ActivityFilters = {},
+  limit = 50
+): Promise<ActivityEntry[]> {
+  if (REST) {
+    try {
+      return await supabaseRest.listActivity(filters, limit);
+    } catch {
+      /* lanjut ke pg / kosong */
+    }
+  }
+  if (!db) return [];
+  try {
+    const conds = [];
+    if (filters.table) conds.push(eq(auditLogTable.tableName, filters.table));
+    if (filters.action) conds.push(eq(auditLogTable.action, filters.action));
+    if (filters.rowId) conds.push(eq(auditLogTable.rowId, filters.rowId));
+    const rows = await db
+      .select()
+      .from(auditLogTable)
+      .where(conds.length > 0 ? and(...conds) : undefined)
+      .orderBy(desc(auditLogTable.createdAt))
+      .limit(Math.min(Math.max(Math.floor(limit), 1), 200));
+    return rows.map(pgRowToActivity);
+  } catch {
+    return [];
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════ */
+/* Workspace & RBAC (Fase 2)                                          */
+/* ══════════════════════════════════════════════════════════════════ */
+
+/** Daftar workspace — REST → pg → [] (tabel pre-migrasi aman). */
+export async function dbListWorkspaces(): Promise<Workspace[]> {
+  if (REST) {
+    try {
+      return await supabaseRest.listWorkspaces();
+    } catch {
+      /* lanjut ke pg */
+    }
+  }
+  if (!db) return [];
+  try {
+    const rows = await db.select().from(workspacesTable).orderBy(asc(workspacesTable.createdAt));
+    return rows.map((w) => ({
+      id: w.id,
+      name: asText(w.name, w.id),
+      slug: asText(w.slug),
+      description: asText(w.description),
+      settings: asJsonObject(w.settings) ?? {},
+      createdAt: w.createdAt ? new Date(w.createdAt).toISOString() : "",
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/** Daftar anggota workspace — REST → pg → []. */
+export async function dbListWorkspaceMembers(workspaceId?: string): Promise<WorkspaceMember[]> {
+  if (REST) {
+    try {
+      return await supabaseRest.listWorkspaceMembers(workspaceId);
+    } catch {
+      /* lanjut ke pg */
+    }
+  }
+  if (!db) return [];
+  try {
+    const rows = workspaceId
+      ? await db
+          .select()
+          .from(workspaceMembersTable)
+          .where(eq(workspaceMembersTable.workspaceId, workspaceId))
+          .orderBy(asc(workspaceMembersTable.createdAt))
+      : await db.select().from(workspaceMembersTable).orderBy(asc(workspaceMembersTable.createdAt));
+    return rows.map((m) => ({
+      workspaceId: m.workspaceId,
+      userId: m.userId,
+      role: (MEMBER_ROLES as readonly string[]).includes(m.role)
+        ? (m.role as MemberRole)
+        : "viewer",
+      createdAt: m.createdAt ? new Date(m.createdAt).toISOString() : "",
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/** Tambah anggota — REST (service key); tanpa DB → error jelas (bukan fake). */
+export async function dbAddWorkspaceMember(
+  workspaceId: string,
+  userId: string,
+  role: MemberRole
+): Promise<void> {
+  if (REST) return supabaseRest.addWorkspaceMember(workspaceId, userId, role);
+  throw new Error("Workspace memerlukan Supabase — tambah anggota tidak tersedia tanpa koneksi DB.");
+}
+
+/** Ubah role anggota — REST; tanpa DB → error jelas. */
+export async function dbUpdateMemberRole(
+  workspaceId: string,
+  userId: string,
+  role: MemberRole
+): Promise<void> {
+  if (REST) return supabaseRest.updateMemberRole(workspaceId, userId, role);
+  throw new Error("Workspace memerlukan Supabase — ubah role tidak tersedia tanpa koneksi DB.");
+}
+
+/** Hapus anggota — REST; tanpa DB → error jelas. */
+export async function dbRemoveWorkspaceMember(
+  workspaceId: string,
+  userId: string
+): Promise<void> {
+  if (REST) return supabaseRest.removeWorkspaceMember(workspaceId, userId);
+  throw new Error("Workspace memerlukan Supabase — hapus anggota tidak tersedia tanpa koneksi DB.");
 }
 
 /* ══════════════════════════════════════════════════════════════════ */

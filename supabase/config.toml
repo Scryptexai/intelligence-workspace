@@ -1,0 +1,24 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Supabase CLI configuration — Intelligence Workspace (CIF)
+# ═══════════════════════════════════════════════════════════════════════════
+# project_id: ref proyek Supabase PRODUKSI (lihat Project Settings → General).
+# Dipakai perintah CLI seperti:
+#   supabase link --project-ref uqtvjerhgvwoxiejvrli
+#   supabase db push          # terapkan migrasi dari supabase/migrations/
+#
+# Catatan: `supabase db push` menerapkan migrasi Phase 0 & Phase 2
+# (supabase/migrations/*) sekaligus. Alternatif manual tanpa CLI: tempel
+# supabase/apply_enterprise_phase0_phase2.sql di Supabase SQL Editor.
+# ═══════════════════════════════════════════════════════════════════════════
+
+project_id = "uqtvjerhgvwoxiejvrli"
+
+[db]
+# Port local hanya untuk `supabase start` (local dev stack) — tidak dipakai
+# untuk produksi. Biarkan default bila tidak menjalankan local dev.
+major_version = 15
+
+[api]
+enabled = true
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]

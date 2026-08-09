@@ -10,12 +10,15 @@ import {
   Settings,
   Sun,
   Zap,
+  LayoutTemplate,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils/helpers";
+import { WorkspaceManager } from "@/components/workspace/WorkspaceManager";
+import { ProjectTemplates } from "@/components/workspace/ProjectTemplates";
 
 const SHORTCUTS = [
   { keys: ["⌘", "K"], label: "Open global search" },
@@ -39,6 +42,30 @@ export default function SettingsPage() {
         title="Settings"
         description="Workspace preferences, appearance and keyboard shortcuts."
       />
+
+      {/* workspace & RBAC (Fase 2) */}
+      <Card>
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <Zap className="h-3.5 w-3.5" /> Workspace &amp; Access (RBAC)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 pt-2">
+          <WorkspaceManager />
+        </CardContent>
+      </Card>
+
+      {/* project templates (Fase 2) */}
+      <Card>
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="flex items-center gap-2 text-[13px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <LayoutTemplate className="h-3.5 w-3.5" /> Project Templates
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 pt-2">
+          <ProjectTemplates />
+        </CardContent>
+      </Card>
 
       {/* appearance */}
       <Card>

@@ -19,5 +19,7 @@ export {
   searchRepository,
   noteRepository,
   viewRepository,
+  activityRepository,
+  workspaceRepository,
 } from "./repositories";
 export { mockAdapter } from "./mockAdapter";
