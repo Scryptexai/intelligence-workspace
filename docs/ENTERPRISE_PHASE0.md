@@ -363,7 +363,42 @@ database + UI management workspace & anggota + project templates.
 
 ---
 
-## 6. Roadmap Enterprise — Fase 1–6
+## 6. Cara eksekusi migrasi (langkah manual — 1 menit)
+
+Migrasi TIDAK bisa dieksekusi dari sandbox pengembangan (egress jaringan ke
+infrastruktur Supabase diblokir di level jaringan — sudah diverifikasi: TLS ke
+pooler di-reset ECONNRESET, REST HTTPS HTTP 000; secret key tidak membantu
+karena blokirnya bukan di autentikasi). Aplikasi yang sudah di-deploy memakai
+`SUPABASE_SECRET_KEY` server-side untuk semua baca/tulis runtime — termasuk
+manajemen anggota workspace — tanpa langkah manual.
+
+Satu-satunya langkah DB yang perlu dijalankan manual (sekali saja):
+
+**Opsi A (paling cepat) — SQL Editor:**
+1. Buka Supabase Dashboard → project `uqtvjerhgvwoxiejvrli` → SQL Editor → New query.
+2. Tempel **seluruh isi** `supabase/apply_enterprise_phase0_phase2.sql`
+   (file gabungan Phase 0 + Phase 2, idempoten, tervalidasi di Postgres nyata).
+3. Run. Selesai — `workspaces` (dengan `CIF Research`), `audit_log` + trigger,
+   kolom provenance, dan RLS per role langsung aktif.
+
+**Opsi B — dari mesin lokal Anda (psql / Supabase CLI):**
+```bash
+# psql dengan connection string Supabase (Project Settings → Database)
+psql "postgresql://postgres.uqtvjerhgvwoxiejvrli:<PASSWORD>@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?sslmode=require" \
+  -f supabase/apply_enterprise_phase0_phase2.sql
+# atau Supabase CLI
+supabase link --project-ref uqtvjerhgvwoxiejvrli
+supabase db push
+```
+
+Setelah migrasi jalan: halaman Settings menampilkan workspace + anggota,
+Activity Ledger mulai mencatat setiap perubahan data, dan RLS membatasi akses
+per role. ⚠️ Catatan: setelah Phase 2, role anon (publishable key) tidak lagi
+membaca tabel inti — aplikasi tetap jalan karena memakai service key.
+
+---
+
+## 7. Roadmap Enterprise — Fase 1–6
 
 Prioritas (disetujui): **1) Audit Trail & Lineage → 2) RBAC & Workspace →
 3) Enterprise API → 4) Pattern Detection → 5) Compliance Report →
