@@ -5,6 +5,7 @@ import type { KnowledgeItem } from "@/lib/types/knowledge";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { formatDate } from "@/lib/utils/helpers";
+import { fingerprintId } from "@/lib/utils/fingerprint";
 
 const STATUS_VARIANT: Record<
   KnowledgeItem["status"],
@@ -81,8 +82,11 @@ export const KnowledgeCard = memo(function KnowledgeCard({
       </div>
 
       {/* internal reference kept subtle for deep-linking */}
-      <div className="mt-auto pt-2.5 text-[10px] font-mono text-muted-foreground/55">
-        ID: {item.id}
+      <div className="mt-auto flex items-center justify-between pt-2.5 font-mono text-[10px] text-muted-foreground/55">
+        <span>ID: {item.id}</span>
+        <span className="text-primary/70" title="Data fingerprint (hash deterministik)">
+          {fingerprintId(item.id)}
+        </span>
       </div>
     </Link>
   );

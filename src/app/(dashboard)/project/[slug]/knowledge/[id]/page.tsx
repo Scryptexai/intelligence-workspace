@@ -19,8 +19,10 @@ import { ReadingModeShell } from "@/components/knowledge/ReadingModeShell";
 import { MarkdownCopyButton } from "@/components/export/MarkdownCopyButton";
 import { PrivateNote } from "@/components/notes/PrivateNote";
 import { RowHistory } from "@/components/activity/RowHistory";
+import { AuditStamp } from "@/components/activity/AuditStamp";
 import { ImpactPanel } from "@/components/knowledge/ImpactPanel";
 import { ProvenanceCard } from "@/components/knowledge/ProvenanceCard";
+import { fingerprintId } from "@/lib/utils/fingerprint";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -85,6 +87,12 @@ export default async function KnowledgeDetailPage({
                 {item.category}
               </Badge>
               <span className="font-mono text-[11px] text-muted-foreground/60">ID: {item.id}</span>
+              <span
+                className="font-mono text-[11px] font-bold text-primary/80"
+                title="Data fingerprint (hash deterministik)"
+              >
+                {fingerprintId(item.id)}
+              </span>
               <MarkdownCopyButton
                 content={buildKnowledgeMarkdown(item, slug)}
                 label="Copy"
@@ -320,6 +328,9 @@ export default async function KnowledgeDetailPage({
 
       {/* audit trail per baris — riwayat setiap perubahan knowledge item ini */}
       <RowHistory table="knowledge_items" rowId={item.id} />
+
+      {/* sticky audit trail — "last verified" */}
+      <AuditStamp table="knowledge_items" rowId={item.id} />
 
       <PrivateNote slug={slug} id={item.id} title={`Private Note — ${item.id}`} />
     </div>

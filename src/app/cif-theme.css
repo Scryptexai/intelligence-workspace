@@ -1,0 +1,181 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   CIF THEME — "The Dark Archive"
+   Palet ruang kendali militer + laboratorium forensik + arsip digital kuno.
+   Diimpor SETELAH globals.css → menggantikan token shadcn default.
+
+     Primary Canvas   #0B0E11  batu tulis gelap (bukan #000, bukan abu-abu)
+     Secondary        #161B22  card/panel
+     Data Highlight   #F59E0B  amber — CIF Score, CTA utama ("kebenaran/nilai")
+     Verification     #2DD4BF  teal — evidence, link, traceability
+     Conflict Alert   #FB7185  rose — conflict, severity high
+     Stability        #A3E635  lime — stable/resolved
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --background: #f4f7fb;
+  --foreground: #0b1220;
+  --card: #ffffff;
+  --card-foreground: #0b1220;
+  --popover: #ffffff;
+  --popover-foreground: #0b1220;
+  --primary: #b45309;
+  --primary-foreground: #fffbeb;
+  --secondary: #e6ecf3;
+  --secondary-foreground: #1e293b;
+  --muted: #eef2f7;
+  --muted-foreground: #5b6b7f;
+  --accent: #ccfbf1;
+  --accent-foreground: #134e4a;
+  --destructive: #be123c;
+  --destructive-foreground: #ffffff;
+  --border: #dbe3ec;
+  --input: #dbe3ec;
+  --ring: #b45309;
+  --success: #65a30d;
+  --warning: #d97706;
+  --critical: #be123c;
+  --radius: 0.375rem;
+  color-scheme: light;
+}
+
+.dark {
+  /* — The Dark Archive — */
+  --background: #0b0e11; /* Primary Canvas */
+  --foreground: #d8dee9;
+  --card: #161b22; /* Secondary Element */
+  --card-foreground: #d8dee9;
+  --popover: #10151b;
+  --popover-foreground: #d8dee9;
+  --primary: #f59e0b; /* Data Highlight — amber */
+  --primary-foreground: #1c1202;
+  --secondary: #1d242d;
+  --secondary-foreground: #d8dee9;
+  --muted: #13181f;
+  --muted-foreground: #7d8ea3;
+  --accent: #103d3a; /* teal-tinted accent */
+  --accent-foreground: #99f6e4;
+  --destructive: #fb7185; /* Conflict Alert — rose */
+  --destructive-foreground: #3b0713;
+  --border: #212a35;
+  --input: #212a35;
+  --ring: #f59e0b;
+  --success: #a3e635; /* Stability — lime */
+  --warning: #f59e0b;
+  --critical: #fb7185;
+  color-scheme: dark;
+}
+
+/* ---------- Typography: data & angka = JetBrains Mono ---------- */
+.dark body {
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+.font-data {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-feature-settings: "tnum";
+}
+.document-prose {
+  line-height: 1.8;
+}
+.document-prose p {
+  margin-bottom: 0.9rem;
+}
+.ui-label {
+  letter-spacing: 0.05em;
+}
+
+/* ---------- Grid overlay: "kertas grafik laboratorium" ---------- */
+.cif-grid-bg {
+  background-image: radial-gradient(
+    rgba(245, 158, 11, 0.05) 1px,
+    transparent 1px
+  );
+  background-size: 22px 22px;
+}
+.dark .cif-grid-bg {
+  background-image: radial-gradient(
+    rgba(148, 163, 184, 0.06) 1px,
+    transparent 1px
+  );
+  background-size: 22px 22px;
+}
+
+/* ---------- Glow amber saat hover knowledge card ---------- */
+.cif-glow-amber {
+  position: relative;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.cif-glow-amber:hover {
+  border-color: rgba(245, 158, 11, 0.55);
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.18), 0 14px 30px -18px rgba(245, 158, 11, 0.35);
+}
+
+/* ---------- Scanning header / live dot ---------- */
+.scan-live {
+  animation: scanBlink 2.2s ease-in-out infinite;
+}
+@keyframes scanBlink {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(163, 230, 53, 0.55);
+  }
+  50% {
+    opacity: 0.65;
+    box-shadow: 0 0 0 5px rgba(163, 230, 53, 0);
+  }
+}
+.scan-sync {
+  animation: scanPulse 1s steps(2, start) infinite;
+}
+@keyframes scanPulse {
+  to {
+    visibility: hidden;
+  }
+}
+
+/* ---------- Mode CANVAS (Obsidian/Notion) ---------- */
+[data-canvas="true"] {
+  --background: #11161d; /* sedikit lebih terang agar nyaman baca */
+  --card: #171d26;
+  --border: #252f3b;
+}
+[data-canvas="true"] .cif-explorer,
+[data-canvas="true"] .cif-inspector {
+  display: none;
+}
+[data-canvas="true"] .cif-main {
+  max-width: 900px;
+  margin-inline: auto;
+}
+[data-canvas="true"] body {
+  line-height: 1.75;
+}
+
+/* ---------- Mode DENSITY (Bloomberg) ---------- */
+[data-density="compact"] .cif-main {
+  max-width: none;
+}
+[data-density="compact"] .cif-pad {
+  padding: 0.5rem;
+}
+
+/* ---------- Footer ---------- */
+.cif-footer {
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card) 60%, transparent);
+}
+
+/* ---------- Command Center fullscreen ---------- */
+.cif-cmd-overlay {
+  background: rgba(4, 6, 9, 0.92);
+  backdrop-filter: blur(14px);
+}
+
+/* ---------- Selection & scrollbar tuned ke palet ---------- */
+.dark ::selection {
+  background: rgba(245, 158, 11, 0.32);
+}
+.dark ::-webkit-scrollbar-thumb {
+  background-color: #26303c;
+}
