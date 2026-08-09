@@ -40,6 +40,9 @@ export const ENDPOINTS = {
   note: (scope: string, id: string) => `/notes?scope=${encodeURIComponent(scope)}&id=${encodeURIComponent(id)}`,
   views: "/views",
   view: (id: string) => `/views/${id}`,
+
+  // audit trail (activity ledger)
+  activity: "/activity",
 } as const;
 
 export type Endpoints = typeof ENDPOINTS;

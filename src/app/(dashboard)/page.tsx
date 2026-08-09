@@ -20,7 +20,7 @@ import { ProjectLogo } from "@/components/brand/ProjectLogo";
 import { LivePriceChip } from "@/components/market/LivePriceChip";
 import { LazySparkline } from "@/components/project/LazySparkline";
 import { sparklineSeries, trendPct } from "@/lib/brand";
-import { cn } from "@/lib/utils/helpers";
+import { cn, mapWithConcurrency } from "@/lib/utils/helpers";
 import { EVENT_COLORS } from "@/lib/constants";
 
 /* ------------------------------------------------------------------ */
@@ -57,45 +57,60 @@ interface FeedItem {
 }
 
 async function buildActivityFeed(projects: Project[]): Promise<FeedItem[]> {
-  const items: FeedItem[] = [];
-  for (const p of projects) {
-    const [events, conflicts] = await Promise.all([
-      eventRepository.list(p.slug),
-      conflictRepository.list(p.slug),
-    ]);
-    for (const ev of events.slice(-3)) {
-      items.push({
-        id: `ev-${p.slug}-${ev.id}`,
-        date: ev.date,
-        project: p.name,
-        symbol: p.symbol,
-        slug: p.slug,
-        kind: "event",
-        text: `${ev.name} (${ev.type})`,
-        href: `/project/${p.slug}/timeline?event=${ev.id}`,
-      });
+  // Paralel dengan concurrency terbatas — fetch events+conflicts per project
+  // SEQUENTIAL untuk 29 project = 58 request berurutan → 15-30s di latensi
+  // jaringan nyata → timeout fungsi serverless Vercel → error boundary.
+  // Concurrency 12 → 3 gelombang. Kegagalan satu project tidak menggagalkan
+  // keseluruhan feed (allSettled semantics).
+  const results = await mapWithConcurrency(projects, 12, async (p): Promise<FeedItem[]> => {
+    const out: FeedItem[] = [];
+    try {
+      const [events, conflicts] = await Promise.all([
+        eventRepository.list(p.slug),
+        conflictRepository.list(p.slug),
+      ]);
+      for (const ev of events.slice(-3)) {
+        out.push({
+          id: `ev-${p.slug}-${ev.id}`,
+          date: ev.date,
+          project: p.name,
+          symbol: p.symbol,
+          slug: p.slug,
+          kind: "event",
+          text: `${ev.name} (${ev.type})`,
+          href: `/project/${p.slug}/timeline?event=${ev.id}`,
+        });
+      }
+      for (const c of conflicts.slice(-3)) {
+        out.push({
+          id: `cf-${p.slug}-${c.id}`,
+          date: c.updatedAt,
+          project: p.name,
+          symbol: p.symbol,
+          slug: p.slug,
+          kind: "conflict",
+          text: `${c.status === "Resolved" ? "Conflict resolved" : "Conflict open"}: ${c.title}`,
+          href: `/project/${p.slug}/conflicts/${c.id}`,
+        });
+      }
+    } catch {
+      /* project ini dilewati — feed tidak boleh menjatuhkan halaman */
     }
-    for (const c of conflicts.slice(-3)) {
-      items.push({
-        id: `cf-${p.slug}-${c.id}`,
-        date: c.updatedAt,
-        project: p.name,
-        symbol: p.symbol,
-        slug: p.slug,
-        kind: "conflict",
-        text: `${c.status === "Resolved" ? "Conflict resolved" : "Conflict open"}: ${c.title}`,
-        href: `/project/${p.slug}/conflicts/${c.id}`,
-      });
-    }
-  }
-  return items.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 9);
+    return out;
+  });
+  return results.flat().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 9);
 }
 
 /* ------------------------------------------------------------------ */
 
 export default async function HomePage() {
   const projects = await projectRepository.list();
-  const feed = await buildActivityFeed(projects);
+  // Feed adalah pelengkap — kalau lambat/gagal (Supabase pending), halaman
+  // TETAP render: batas waktu 4 detik, lalu feed kosong.
+  const feed = await Promise.race([
+    buildActivityFeed(projects),
+    new Promise<FeedItem[]>((resolve) => setTimeout(() => resolve([]), 3000)),
+  ]).catch(() => [] as FeedItem[]);
 
   const totalKnowledge = projects.reduce((s, p) => s + p.knowledgeCount, 0);
   const totalConflicts = projects.reduce((s, p) => s + p.conflictCount, 0);

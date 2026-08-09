@@ -31,6 +31,7 @@ import type { Entity, Relationship } from "@/lib/types/entity";
 import type { TimelineEvent } from "@/lib/types/event";
 import type { Conflict } from "@/lib/types/conflict";
 import type { QAReport, BehaviorProfile } from "@/lib/types/project";
+import type { ActivityEntry, ActivityFilters } from "@/lib/types/activity";
 import type { SearchResult } from "@/lib/data";
 
 const isMock = (): boolean => effectiveDataSource() === "mock";
@@ -160,6 +161,21 @@ export const searchRepository = {
     if (isMock()) return R.searchRepository.query(q, params);
     try {
       return await db.dbSearch(q);
+    } catch {
+      return [];
+    }
+  },
+};
+
+export const activityRepository = {
+  /**
+   * Ledger audit — baca LANGSUNG dari DB (audit_log via supabaseService /
+   * dataService), bukan HTTP self-fetch. Data kosong → [] (empty-state).
+   */
+  async list(filters?: ActivityFilters): Promise<ActivityEntry[]> {
+    if (isMock()) return R.activityRepository.list(filters);
+    try {
+      return await db.dbListActivity(filters);
     } catch {
       return [];
     }

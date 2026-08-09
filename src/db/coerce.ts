@@ -64,3 +64,24 @@ export function asStringRecord(v: unknown): Record<string, string> {
   }
   return out;
 }
+
+/** Objek JSON apa pun → Record<string,unknown>; selain itu null (tidak melempar). */
+export function asJsonObject(v: unknown): Record<string, unknown> | null {
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    return v as Record<string, unknown>;
+  }
+  return null;
+}
+
+/** Teks nullable — string non-kosong → nilai; null/undefined → null. */
+export function asNullableText(v: unknown): string | null {
+  return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+/** boolean dari bentuk apa pun — jatuh ke `dflt` bila tidak bisa dipastikan. */
+export function asBoolean(v: unknown, dflt = false): boolean {
+  if (typeof v === "boolean") return v;
+  if (v === "true" || v === 1 || v === "1") return true;
+  if (v === "false" || v === 0 || v === "0") return false;
+  return dflt;
+}

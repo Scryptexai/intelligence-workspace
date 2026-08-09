@@ -29,6 +29,33 @@ export function weightStars(w: number): string {
   return "★".repeat(Math.max(0, Math.min(5, w))) + "☆".repeat(Math.max(0, 5 - w));
 }
 
+/**
+ * Jalankan `fn` atas semua `items` dengan concurrency terbatas.
+ *
+ * Dipakai untuk mem-paralelkan fetch N+1 ke Supabase (mis. per-project)
+ * TANPA membuka ratusan koneksi sekaligus — mencegah timeout fungsi
+ * serverless (Vercel) dan rate-limit upstream. Urutan hasil sama dengan
+ * urutan input.
+ */
+export async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const safe = Math.max(1, Math.floor(limit));
+  const workers = Array.from({ length: Math.min(safe, items.length) }, async () => {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await fn(items[i]);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
 export function pct(n: number): string {
   return `${Math.round(n)}%`;
 }

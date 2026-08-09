@@ -22,6 +22,7 @@ import {
   qaDimensions,
   qaPhases,
   behaviorProfiles,
+  auditLog as auditLogTable,
 } from "./schema";
 import {
   getProjects as getMockProjects,
@@ -45,8 +46,35 @@ import type { TimelineEvent } from "@/lib/types/event";
 import type { Conflict } from "@/lib/types/conflict";
 import type { SearchResult } from "@/lib/data";
 import type { ListParams } from "@/lib/api/types";
-import { supabaseRest, supabaseRestEnabled } from "./supabaseService";
-import { asConflictVersion, asStringArray, asStringRecord } from "./coerce";
+import type { ActivityAction, ActivityEntry, ActivityFilters } from "@/lib/types/activity";
+import { supabaseRest, supabaseRestEnabled, changedFieldsBetween } from "./supabaseService";
+import { asConflictVersion, asJsonObject, asStringArray, asStringRecord, asText } from "./coerce";
+
+const ACTIVITY_ACTIONS: ActivityAction[] = ["INSERT", "UPDATE", "DELETE"];
+
+/** Baris audit_log via pg (camelCase) → ActivityEntry. Tidak pernah melempar. */
+function pgRowToActivity(row: typeof auditLogTable.$inferSelect): ActivityEntry {
+  const oldData = asJsonObject(row.oldData);
+  const newData = asJsonObject(row.newData);
+  return {
+    id: Number(row.id),
+    tableName: asText(row.tableName, "unknown"),
+    rowId: row.rowId ?? null,
+    action: ACTIVITY_ACTIONS.includes(row.action as ActivityAction)
+      ? (row.action as ActivityAction)
+      : "UPDATE",
+    oldData,
+    newData,
+    changedFields:
+      Array.isArray(row.changedFields) && row.changedFields.length > 0
+        ? row.changedFields
+        : changedFieldsBetween(oldData, newData),
+    actorLabel: asText(row.actorLabel, "system") || "system",
+    actorId: asText(row.actorId, "system") || "system",
+    workspaceId: row.workspaceId ?? null,
+    createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : "",
+  };
+}
 
 const DB = isDbConfigured();
 /** Prioritas sumber: Supabase REST (cif_datasets) → pg pool → mock. */
@@ -565,6 +593,44 @@ export async function dbGetBehavior(slug: string): Promise<BehaviorProfile | und
     };
   } catch {
     return behaviorMock[slug];
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════ */
+/* Activity ledger (audit_log)                                        */
+/* ══════════════════════════════════════════════════════════════════ */
+
+/**
+ * Baca ledger audit (terbaru dulu). Prioritas sumber sama dengan data lain:
+ * Supabase REST → pg (DATABASE_URL) → kosong (bukan mock — audit hanya berisi
+ * data riil dari trigger Postgres). Filter: table/action/rowId + limit.
+ */
+export async function dbListActivity(
+  filters: ActivityFilters = {},
+  limit = 50
+): Promise<ActivityEntry[]> {
+  if (REST) {
+    try {
+      return await supabaseRest.listActivity(filters, limit);
+    } catch {
+      /* lanjut ke pg / kosong */
+    }
+  }
+  if (!db) return [];
+  try {
+    const conds = [];
+    if (filters.table) conds.push(eq(auditLogTable.tableName, filters.table));
+    if (filters.action) conds.push(eq(auditLogTable.action, filters.action));
+    if (filters.rowId) conds.push(eq(auditLogTable.rowId, filters.rowId));
+    const rows = await db
+      .select()
+      .from(auditLogTable)
+      .where(conds.length > 0 ? and(...conds) : undefined)
+      .orderBy(desc(auditLogTable.createdAt))
+      .limit(Math.min(Math.max(Math.floor(limit), 1), 200));
+    return rows.map(pgRowToActivity);
+  } catch {
+    return [];
   }
 }
 

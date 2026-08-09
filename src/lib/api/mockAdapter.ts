@@ -31,6 +31,7 @@ import type { QAReport, BehaviorProfile } from "@/lib/types/project";
 import type { MarketData } from "@/lib/types/market";
 import type { SearchResult } from "@/lib/data";
 import type { SavedView } from "@/lib/types/view";
+import type { ActivityEntry, ActivityFilters } from "@/lib/types/activity";
 import type { ListParams, PageParams, Paginated } from "./types";
 
 const now = () => new Date().toISOString();
@@ -229,6 +230,15 @@ export const mockAdapter = {
     const next = all.filter((v) => v.id !== id);
     lsSet(LS_VIEWS, next);
     return Promise.resolve(next.filter((v) => v.scope === scope));
+  },
+
+  /**
+   * Activity ledger — SELALU kosong di mode mock.
+   * Audit hanya boleh berisi data riil dari trigger Postgres (audit_log);
+   * empty-state adalah perilaku yang benar, bukan kekurangan.
+   */
+  listActivity(_filters?: ActivityFilters): Promise<ActivityEntry[]> {
+    return Promise.resolve([]);
   },
 
   meta() {

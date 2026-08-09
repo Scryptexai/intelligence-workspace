@@ -23,6 +23,7 @@ import type { QAReport, BehaviorProfile } from "@/lib/types/project";
 import type { MarketData } from "@/lib/types/market";
 import type { SearchResult } from "@/lib/data";
 import type { SavedView } from "@/lib/types/view";
+import type { ActivityEntry, ActivityFilters } from "@/lib/types/activity";
 
 /** Mode diputuskan LIVE (bukan build-time) agar auto-detect /api/config berfungsi. */
 const isMockMode = (): boolean => effectiveDataSource() === "mock";
@@ -191,5 +192,23 @@ export const viewRepository = {
     return isMockMode()
       ? mockAdapter.removeView(id, scope)
       : http.delete<SavedView[]>(`${ENDPOINTS.view(id)}?scope=${encodeURIComponent(scope)}`);
+  },
+};
+
+/**
+ * Activity ledger — data riil HANYA dari /api/activity (server → audit_log).
+ * Mode mock sengaja mengembalikan [] (bukan data palsu); empty-state di UI
+ * adalah perilaku yang benar.
+ */
+export const activityRepository = {
+  list(filters?: ActivityFilters): Promise<ActivityEntry[]> {
+    return isMockMode()
+      ? mockAdapter.listActivity(filters)
+      : apiGet<ActivityEntry[]>(ENDPOINTS.activity, {
+          table: filters?.table,
+          action: filters?.action,
+          rowId: filters?.rowId,
+          limit: filters?.limit,
+        }).then((r) => r.data);
   },
 };

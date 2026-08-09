@@ -17,6 +17,7 @@ import { ConfidenceGauge } from "@/components/knowledge/ConfidenceGauge";
 import { ReadingModeShell } from "@/components/knowledge/ReadingModeShell";
 import { MarkdownCopyButton } from "@/components/export/MarkdownCopyButton";
 import { PrivateNote } from "@/components/notes/PrivateNote";
+import { RowHistory } from "@/components/activity/RowHistory";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -305,6 +306,9 @@ export default async function KnowledgeDetailPage({
         </h2>
         <EvidenceTrace evidence={item.evidence} />
       </div>
+
+      {/* audit trail per baris — riwayat setiap perubahan knowledge item ini */}
+      <RowHistory table="knowledge_items" rowId={item.id} />
 
       <PrivateNote slug={slug} id={item.id} title={`Private Note — ${item.id}`} />
     </div>
