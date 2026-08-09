@@ -21,6 +21,8 @@ import {
   timestamp,
   jsonb,
   date,
+  uuid,
+  primaryKey,
   uniqueIndex,
   index,
 } from "drizzle-orm/pg-core";
@@ -335,7 +337,36 @@ export const users = pgTable(
 /* ------------------------------------------------------------------ */
 
 /* ------------------------------------------------------------------ */
-/* 14. AUDIT LOG (Phase 0 — append-only, diisi trigger cif_audit_row)   */
+/* 14. WORKSPACES & WORKSPACE_MEMBERS (Phase 0 — multi-tenant/RBAC)     */
+/* ------------------------------------------------------------------ */
+
+export const workspaces = pgTable(
+  "workspaces",
+  {
+    id: uuid("id").primaryKey(),
+    name: text("name").notNull(),
+    slug: text("slug").unique(),
+    description: text("description"),
+    settings: jsonb("settings").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("workspaces_slug_idx").on(t.slug)]
+);
+
+export const workspaceMembers = pgTable(
+  "workspace_members",
+  {
+    workspaceId: uuid("workspace_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    role: text("role").notNull().default("viewer"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.workspaceId, t.userId] })]
+);
+
+/* ------------------------------------------------------------------ */
+/* 15. AUDIT LOG (Phase 0 — append-only, diisi trigger cif_audit_row)   */
 /* ------------------------------------------------------------------ */
 
 export const auditLog = pgTable(
@@ -378,3 +409,5 @@ export type NoteRow = typeof notes.$inferSelect;
 export type SavedViewRow = typeof savedViews.$inferSelect;
 export type UserRow = typeof users.$inferSelect;
 export type AuditLogRow = typeof auditLog.$inferSelect;
+export type WorkspaceRow = typeof workspaces.$inferSelect;
+export type WorkspaceMemberRow = typeof workspaceMembers.$inferSelect;

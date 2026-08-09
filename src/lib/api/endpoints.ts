@@ -43,6 +43,12 @@ export const ENDPOINTS = {
 
   // audit trail (activity ledger)
   activity: "/activity",
+
+  // workspace & RBAC
+  workspaces: "/workspaces",
+  workspaceMembers: (id: string) => `/workspaces/${encodeURIComponent(id)}/members`,
+  workspaceMember: (id: string, userId: string) =>
+    `/workspaces/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`,
 } as const;
 
 export type Endpoints = typeof ENDPOINTS;

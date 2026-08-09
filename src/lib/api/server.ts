@@ -33,6 +33,7 @@ import type { Conflict } from "@/lib/types/conflict";
 import type { QAReport, BehaviorProfile } from "@/lib/types/project";
 import type { ActivityEntry, ActivityFilters } from "@/lib/types/activity";
 import type { KnowledgeImpact } from "@/lib/types/lineage";
+import type { MemberRole, Workspace, WorkspaceMember } from "@/lib/types/workspace";
 import type { SearchResult } from "@/lib/data";
 
 const isMock = (): boolean => effectiveDataSource() === "mock";
@@ -196,6 +197,42 @@ export const lineageRepository = {
     } catch {
       return undefined;
     }
+  },
+};
+
+export const workspaceRepository = {
+  /**
+   * Workspace & RBAC — baca LANGSUNG dari DB (workspaces/workspace_members
+   * via supabaseService/dataService). Baca gagal → [] (empty-state);
+   * tulis tanpa DB → error jelas (bukan fake data).
+   */
+  async list(): Promise<Workspace[]> {
+    if (isMock()) return R.workspaceRepository.listWorkspaces();
+    try {
+      return await db.dbListWorkspaces();
+    } catch {
+      return [];
+    }
+  },
+  async members(workspaceId: string): Promise<WorkspaceMember[]> {
+    if (isMock()) return R.workspaceRepository.listMembers(workspaceId);
+    try {
+      return await db.dbListWorkspaceMembers(workspaceId);
+    } catch {
+      return [];
+    }
+  },
+  async addMember(workspaceId: string, userId: string, role: MemberRole): Promise<void> {
+    if (isMock()) return R.workspaceRepository.addMember(workspaceId, userId, role);
+    return db.dbAddWorkspaceMember(workspaceId, userId, role);
+  },
+  async updateRole(workspaceId: string, userId: string, role: MemberRole): Promise<void> {
+    if (isMock()) return R.workspaceRepository.updateRole(workspaceId, userId, role);
+    return db.dbUpdateMemberRole(workspaceId, userId, role);
+  },
+  async removeMember(workspaceId: string, userId: string): Promise<void> {
+    if (isMock()) return R.workspaceRepository.removeMember(workspaceId, userId);
+    return db.dbRemoveWorkspaceMember(workspaceId, userId);
   },
 };
 

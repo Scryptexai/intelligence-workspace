@@ -29,6 +29,8 @@ import type {
   LineageRef,
 } from "@/lib/types/lineage";
 import { idMatches } from "@/lib/types/lineage";
+import type { MemberRole, Workspace, WorkspaceMember } from "@/lib/types/workspace";
+import { MEMBER_ROLES } from "@/lib/types/workspace";
 import { mapWithConcurrency } from "@/lib/utils/helpers";
 import {
   asConflictVersion,
@@ -669,6 +671,101 @@ export const supabaseRest = {
       evidenceCount: evCountRows.length,
       generatedAt: new Date().toISOString(),
     };
+  },
+
+  /* ------------------------------------------------------------------ */
+  /* Workspace & RBAC (Fase 2) — baca/kelola via service key             */
+  /* ------------------------------------------------------------------ */
+
+  /** Daftar workspace (REST; tabel belum ada → [] — pre-migrasi aman). */
+  async listWorkspaces(): Promise<Workspace[]> {
+    try {
+      const rows = await getRows<{
+        id: string; name: string; slug: string | null;
+        description: string | null; settings: unknown; created_at: string;
+      }>(`workspaces?select=*&order=created_at`);
+      return rows.map((w) => ({
+        id: asText(w.id),
+        name: asText(w.name, w.id),
+        slug: asText(w.slug),
+        description: asText(w.description),
+        settings: asJsonObject(w.settings) ?? {},
+        createdAt: asText(w.created_at),
+      }));
+    } catch {
+      return [];
+    }
+  },
+
+  /** Daftar anggota workspace (opsional difilter per workspace). */
+  async listWorkspaceMembers(workspaceId?: string): Promise<WorkspaceMember[]> {
+    try {
+      const cond = workspaceId ? `workspace_id=eq.${encodeURIComponent(workspaceId)}&` : "";
+      const rows = await getRows<{
+        workspace_id: string; user_id: string; role: string; created_at: string;
+      }>(`workspace_members?${cond}select=*&order=created_at`);
+      return rows.map((m) => ({
+        workspaceId: asText(m.workspace_id),
+        userId: asText(m.user_id),
+        role: (MEMBER_ROLES as readonly string[]).includes(m.role)
+          ? (m.role as MemberRole)
+          : "viewer",
+        createdAt: asText(m.created_at),
+      }));
+    } catch {
+      return [];
+    }
+  },
+
+  /** Tambah anggota (POST workspace_members, service key). */
+  async addWorkspaceMember(workspaceId: string, userId: string, role: MemberRole): Promise<void> {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/workspace_members`, {
+      method: "POST",
+      headers: {
+        apikey: SECRET_KEY!,
+        Authorization: `Bearer ${SECRET_KEY!}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({ workspace_id: workspaceId, user_id: userId, role }),
+    });
+    if (!res.ok && res.status !== 201) {
+      throw new Error(`addWorkspaceMember gagal: HTTP ${res.status}`);
+    }
+  },
+
+  /** Ubah role anggota (PATCH, service key). */
+  async updateMemberRole(workspaceId: string, userId: string, role: MemberRole): Promise<void> {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/workspace_members?workspace_id=eq.${encodeURIComponent(workspaceId)}&user_id=eq.${encodeURIComponent(userId)}`,
+      {
+        method: "PATCH",
+        headers: {
+          apikey: SECRET_KEY!,
+          Authorization: `Bearer ${SECRET_KEY!}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+        },
+        body: JSON.stringify({ role }),
+      }
+    );
+    if (!res.ok && res.status !== 204) {
+      throw new Error(`updateMemberRole gagal: HTTP ${res.status}`);
+    }
+  },
+
+  /** Hapus anggota (DELETE, service key). */
+  async removeWorkspaceMember(workspaceId: string, userId: string): Promise<void> {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/workspace_members?workspace_id=eq.${encodeURIComponent(workspaceId)}&user_id=eq.${encodeURIComponent(userId)}`,
+      {
+        method: "DELETE",
+        headers: { apikey: SECRET_KEY!, Authorization: `Bearer ${SECRET_KEY!}` },
+      }
+    );
+    if (!res.ok && res.status !== 204) {
+      throw new Error(`removeWorkspaceMember gagal: HTTP ${res.status}`);
+    }
   },
 
   /** Uji koneksi: query tabel `projects`. */

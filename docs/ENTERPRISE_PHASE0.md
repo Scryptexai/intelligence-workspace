@@ -300,6 +300,69 @@ Melengkapi prioritas #1 (*Audit Trail & Data Lineage*) setelah Fase 0: menjawab
 
 ---
 
+## 5.4 Fase 2 — RBAC & Workspace penuh (implemented)
+
+Prioritas #2: enforcement akses berbasis role (admin/editor/viewer) di level
+database + UI management workspace & anggota + project templates.
+
+### Deliverable
+
+| Lapisan | Artefak |
+|---|---|
+| Migrasi | `supabase/migrations/20260809010000_phase2_rbac_workspace.sql` |
+| Tipe | `src/lib/types/workspace.ts` (`MemberRole`, `Workspace`, `WorkspaceMember`, `PROJECT_TEMPLATES`, uuid default) |
+| Schema (drizzle) | `workspaces`, `workspaceMembers` (+ auditLog tetap) |
+| Service | `supabaseService` (+`listWorkspaces`, `listWorkspaceMembers`, `addWorkspaceMember`, `updateMemberRole`, `removeWorkspaceMember`) |
+| Data service | `dataService` (REST → pg untuk baca; tulis melempar error jelas tanpa DB) |
+| API routes | `GET /api/workspaces` · `GET|POST /api/workspaces/:id/members` · `PATCH|DELETE /api/workspaces/:id/members/:userId` (validasi uuid + role) |
+| Repository | client (`repositories.ts` + mockAdapter: baca `[]`, tulis tolak) & server (`server.ts`, langsung DB) |
+| Hook | `useWorkspaceQuery.ts` (query + mutation dengan invalidation) |
+| UI | `WorkspaceManager` + `RoleBadge` + `ProjectTemplates` di `/settings` |
+
+### Desain RLS (migrasi Phase 2)
+
+- Helper `cif_workspace_role(ws uuid)` — SECURITY DEFINER, membaca
+  `workspace_members` dengan `auth.uid()`; NULL bila bukan anggota.
+- 16 tabel inti: `ALTER TABLE … ENABLE ROW LEVEL SECURITY` + 3 policy per tabel
+  (hanya jika kolom `workspace_id` ada):
+  - `<tabel>_viewer_select` — SELECT untuk anggota (COALESCE ke workspace default)
+  - `<tabel>_editor_insert` / `_editor_update` — INSERT/UPDATE untuk admin/editor
+  - `<tabel>_admin_delete` — DELETE untuk admin
+- `workspace_members`: admin workspace boleh INSERT/UPDATE/DELETE anggota;
+  policy SELECT sendiri (Phase 0) dipertahankan.
+- `workspaces`: admin boleh UPDATE.
+- ⚠️ Setelah migrasi, **anon (publishable key) tidak lagi membaca tabel inti**
+  (tidak ada policy anon) — hanya authenticated anggota. Service key (aplikasi)
+  tetap bypass RLS. Contoh policy anon read-only tersedia (dikomentari).
+
+### Verifikasi Fase 2
+
+- **Migrasi dieksekusi di Postgres nyata (PGlite)** dengan 4 user
+  (admin/editor/viewer/outsider) + stub `auth.uid()` dari GUC:
+
+| Peran | SELECT | INSERT | UPDATE | DELETE | Kelola anggota |
+|---|---|---|---|---|---|
+| viewer | ✅ | ✗ | 0 baris | 0 baris | ✗ |
+| editor | ✅ | ✅ | 1 baris | 0 baris | — |
+| admin | ✅ | ✅ | 1 baris | 1 baris | ✅ |
+| outsider (non-anggota) | 0 baris | ✗ | — | — | — |
+
+  Migrasi idempoten (dijalankan ulang) ✅. Catatan: PGlite (WASM) punya quirk —
+  `DELETE … WHERE` pada kolom uuid dengan RLS mengembalikan 0 baris walau policy
+  cocok (terbukti dengan policy raw sederhana); Postgres asli menangani ini
+  normal (pattern PostgREST standar). Penegasan "admin hapus anggota" memakai
+  probe tanpa-WHERE.
+- **Aplikasi** (production build + mirror data riil + workspace harness):
+  `GET /api/workspaces` → 2 workspace; members per workspace benar
+  (admin/editor/viewer); `POST` tambah anggota → 204; `PATCH` ubah role →
+  204 (role terbaca berubah); `DELETE` → 204; id/role invalid → 400.
+  Halaman `/settings` → 200, merender Workspace & Access (RBAC),
+  Project Templates (VC Due Diligence, Exchange Listing), form tambah anggota.
+  Regresi semua route → 200; `tsc --noEmit` bersih; eslint file baru bersih
+  (1 error pre-existing di settings: `useEffect(setMounted)` — tidak disentuh).
+
+---
+
 ## 6. Roadmap Enterprise — Fase 1–6
 
 Prioritas (disetujui): **1) Audit Trail & Lineage → 2) RBAC & Workspace →
@@ -310,7 +373,7 @@ Prioritas (disetujui): **1) Audit Trail & Lineage → 2) RBAC & Workspace →
 |---|---|---|---|
 | **0** | Audit Trail & Workspace foundation | audit_log + trigger + provenance + workspaces + Activity Ledger + RowHistory | ✅ |
 | **1** | Data Lineage & Impact Analysis | provenance per data point (source/connector/ingested_at), graf lineage di knowledge detail, impact analysis (referensi balik: knowledge/event/conflict/evidence) + toleransi id pendek | ✅ **Fase ini** |
-| **2** | RBAC & Workspace penuh | RLS per role (admin/editor/viewer) pada tabel inti; management UI workspace + member; project templates (VC Due Diligence, Exchange Listing) | 📋 |
+| **2** | RBAC & Workspace penuh | RLS per role (admin/editor/viewer) pada tabel inti; management UI workspace + member; project templates (VC Due Diligence, Exchange Listing) | ✅ **Fase ini** |
 | **3** | Enterprise API | API Gateway REST (+GraphQL), rate limiting & quota (metering/entitlements per tenant), webhook (mis. Slack saat conflict baru) | 📋 |
 | **4** | Pattern Detection | Automated pattern detection, anomaly detection, forecasting (tabel `cif_patterns/cif_backtests/cif_decision_events` siap dipakai) | 📋 |
 | **5** | Compliance Report | Auto-generate laporan kepatuhan (validasi CIF Score) → PDF/Excel/JSON; audit certifier | 📋 |

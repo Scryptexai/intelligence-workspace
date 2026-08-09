@@ -32,6 +32,7 @@ import type { MarketData } from "@/lib/types/market";
 import type { SearchResult } from "@/lib/data";
 import type { SavedView } from "@/lib/types/view";
 import type { ActivityEntry, ActivityFilters } from "@/lib/types/activity";
+import type { MemberRole, Workspace, WorkspaceMember } from "@/lib/types/workspace";
 import type { ListParams, PageParams, Paginated } from "./types";
 
 const now = () => new Date().toISOString();
@@ -239,6 +240,23 @@ export const mockAdapter = {
    */
   listActivity(_filters?: ActivityFilters): Promise<ActivityEntry[]> {
     return Promise.resolve([]);
+  },
+
+  /* workspace & RBAC — baca kosong, tulis ditolak (bukan fake data) */
+  listWorkspaces(): Promise<Workspace[]> {
+    return Promise.resolve([]);
+  },
+  listWorkspaceMembers(_workspaceId: string): Promise<WorkspaceMember[]> {
+    return Promise.resolve([]);
+  },
+  addWorkspaceMember(_workspaceId: string, _userId: string, _role: MemberRole): Promise<void> {
+    return Promise.reject(new Error("Mode mock: manajemen workspace memerlukan Supabase."));
+  },
+  updateMemberRole(_workspaceId: string, _userId: string, _role: MemberRole): Promise<void> {
+    return Promise.reject(new Error("Mode mock: manajemen workspace memerlukan Supabase."));
+  },
+  removeWorkspaceMember(_workspaceId: string, _userId: string): Promise<void> {
+    return Promise.reject(new Error("Mode mock: manajemen workspace memerlukan Supabase."));
   },
 
   meta() {

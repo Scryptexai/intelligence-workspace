@@ -23,6 +23,8 @@ import {
   qaPhases,
   behaviorProfiles,
   auditLog as auditLogTable,
+  workspaces as workspacesTable,
+  workspaceMembers as workspaceMembersTable,
 } from "./schema";
 import {
   getProjects as getMockProjects,
@@ -49,6 +51,8 @@ import type { ListParams } from "@/lib/api/types";
 import type { ActivityAction, ActivityEntry, ActivityFilters } from "@/lib/types/activity";
 import type { KnowledgeImpact, LineageRef } from "@/lib/types/lineage";
 import { idMatches } from "@/lib/types/lineage";
+import type { MemberRole, Workspace, WorkspaceMember } from "@/lib/types/workspace";
+import { MEMBER_ROLES } from "@/lib/types/workspace";
 import { supabaseRest, supabaseRestEnabled, changedFieldsBetween } from "./supabaseService";
 import {
   asConflictVersion,
@@ -737,6 +741,95 @@ export async function dbListActivity(
   } catch {
     return [];
   }
+}
+
+/* ══════════════════════════════════════════════════════════════════ */
+/* Workspace & RBAC (Fase 2)                                          */
+/* ══════════════════════════════════════════════════════════════════ */
+
+/** Daftar workspace — REST → pg → [] (tabel pre-migrasi aman). */
+export async function dbListWorkspaces(): Promise<Workspace[]> {
+  if (REST) {
+    try {
+      return await supabaseRest.listWorkspaces();
+    } catch {
+      /* lanjut ke pg */
+    }
+  }
+  if (!db) return [];
+  try {
+    const rows = await db.select().from(workspacesTable).orderBy(asc(workspacesTable.createdAt));
+    return rows.map((w) => ({
+      id: w.id,
+      name: asText(w.name, w.id),
+      slug: asText(w.slug),
+      description: asText(w.description),
+      settings: asJsonObject(w.settings) ?? {},
+      createdAt: w.createdAt ? new Date(w.createdAt).toISOString() : "",
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/** Daftar anggota workspace — REST → pg → []. */
+export async function dbListWorkspaceMembers(workspaceId?: string): Promise<WorkspaceMember[]> {
+  if (REST) {
+    try {
+      return await supabaseRest.listWorkspaceMembers(workspaceId);
+    } catch {
+      /* lanjut ke pg */
+    }
+  }
+  if (!db) return [];
+  try {
+    const rows = workspaceId
+      ? await db
+          .select()
+          .from(workspaceMembersTable)
+          .where(eq(workspaceMembersTable.workspaceId, workspaceId))
+          .orderBy(asc(workspaceMembersTable.createdAt))
+      : await db.select().from(workspaceMembersTable).orderBy(asc(workspaceMembersTable.createdAt));
+    return rows.map((m) => ({
+      workspaceId: m.workspaceId,
+      userId: m.userId,
+      role: (MEMBER_ROLES as readonly string[]).includes(m.role)
+        ? (m.role as MemberRole)
+        : "viewer",
+      createdAt: m.createdAt ? new Date(m.createdAt).toISOString() : "",
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/** Tambah anggota — REST (service key); tanpa DB → error jelas (bukan fake). */
+export async function dbAddWorkspaceMember(
+  workspaceId: string,
+  userId: string,
+  role: MemberRole
+): Promise<void> {
+  if (REST) return supabaseRest.addWorkspaceMember(workspaceId, userId, role);
+  throw new Error("Workspace memerlukan Supabase — tambah anggota tidak tersedia tanpa koneksi DB.");
+}
+
+/** Ubah role anggota — REST; tanpa DB → error jelas. */
+export async function dbUpdateMemberRole(
+  workspaceId: string,
+  userId: string,
+  role: MemberRole
+): Promise<void> {
+  if (REST) return supabaseRest.updateMemberRole(workspaceId, userId, role);
+  throw new Error("Workspace memerlukan Supabase — ubah role tidak tersedia tanpa koneksi DB.");
+}
+
+/** Hapus anggota — REST; tanpa DB → error jelas. */
+export async function dbRemoveWorkspaceMember(
+  workspaceId: string,
+  userId: string
+): Promise<void> {
+  if (REST) return supabaseRest.removeWorkspaceMember(workspaceId, userId);
+  throw new Error("Workspace memerlukan Supabase — hapus anggota tidak tersedia tanpa koneksi DB.");
 }
 
 /* ══════════════════════════════════════════════════════════════════ */
