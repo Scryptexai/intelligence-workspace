@@ -24,6 +24,11 @@ import type { Conflict } from "@/lib/types/conflict";
 import type { SavedView } from "@/lib/types/view";
 import type { SearchResult } from "@/lib/data";
 import type { ActivityAction, ActivityEntry, ActivityFilters } from "@/lib/types/activity";
+import type {
+  KnowledgeImpact,
+  LineageRef,
+} from "@/lib/types/lineage";
+import { idMatches } from "@/lib/types/lineage";
 import { mapWithConcurrency } from "@/lib/utils/helpers";
 import {
   asConflictVersion,
@@ -33,6 +38,7 @@ import {
   asStringArray,
   asStringRecord,
   asText,
+  buildProvenance,
 } from "./coerce";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
@@ -206,6 +212,12 @@ interface RawKnowledge {
   author: string | null;
   related_knowledge: string[] | null;
   dependencies: string[] | null;
+  /* kolom provenance (additive — ada setelah migrasi Phase 0) */
+  workspace_id?: string | null;
+  source?: string | null;
+  source_url?: string | null;
+  connector?: string | null;
+  ingested_at?: string | null;
 }
 
 interface RawEvidence {
@@ -254,6 +266,7 @@ function mapKnowledge(k: RawKnowledge, evs: RawEvidence[]): KnowledgeItem {
     })),
     relatedKnowledge: asStringArray(k.related_knowledge),
     dependencies: asStringArray(k.dependencies),
+    provenance: buildProvenance(k.source, k.source_url, k.connector, k.ingested_at),
   };
 }
 
@@ -572,6 +585,90 @@ export const supabaseRest = {
       );
     });
     return results.slice(0, 40);
+  },
+
+  /* ------------------------------------------------------------------ */
+  /* Data lineage & impact analysis (Fase 1)                             */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * Impact analysis untuk satu knowledge item: siapa yang mereferensikan,
+   * event/conflict mana yang menyentuh, dependensi event, dan jumlah
+   * evidence. 4 query konstan (knowledge + events + conflicts + evidence)
+   * lalu filter di memori — tanpa N+1. Referensi id pendek ("K-002",
+   * "EV-013") dicocokkan dengan id penuh ("arbitrum-K-002") via idMatches.
+   */
+  async getKnowledgeImpact(slug: string, id: string): Promise<KnowledgeImpact | undefined> {
+    const s = encodeURIComponent(slug);
+    const [knRows, evRows, cfRows, evCountRows] = await Promise.all([
+      getRows<RawKnowledge>(`knowledge_items?project_slug=eq.${s}&select=*`),
+      getRows<RawEvent>(`events?project_slug=eq.${s}&select=*`),
+      getRows<RawConflict>(`conflicts?project_slug=eq.${s}&select=*`),
+      getRows<{ id: string }>(
+        `evidence_items?knowledge_id=eq.${encodeURIComponent(id)}&select=id`
+      ),
+    ]);
+
+    const item = knRows.find((k) => k.id === id);
+    if (!item) return undefined;
+
+    const referencedBy: LineageRef[] = [];
+    for (const k of knRows) {
+      if (k.id === id) continue;
+      const rel = asStringArray(k.related_knowledge).some((r) => idMatches(r, id));
+      const dep = asStringArray(k.dependencies).some((d) => idMatches(d, id));
+      if (rel || dep) {
+        referencedBy.push({
+          id: k.id,
+          name: asText(k.name, k.id),
+          kind: "knowledge",
+          href: `/project/${slug}/knowledge/${k.id}`,
+          meta: asText(k.category) || undefined,
+        });
+      }
+    }
+
+    const eventsTouching: LineageRef[] = evRows
+      .filter((e) => asStringArray(e.affected_knowledge).some((a) => idMatches(a, id)))
+      .map((e) => ({
+        id: e.id,
+        name: asText(e.name, e.id),
+        kind: "event",
+        href: `/project/${slug}/timeline?event=${e.id}`,
+        meta: asText(e.type) || undefined,
+      }));
+
+    const conflictsTouching: LineageRef[] = cfRows
+      .filter((c) => asStringArray(c.affected_knowledge).some((a) => idMatches(a, id)))
+      .map((c) => ({
+        id: c.id,
+        name: asText(c.title, c.id),
+        kind: "conflict",
+        href: `/project/${slug}/conflicts/${c.id}`,
+        meta: asText(c.status) || undefined,
+      }));
+
+    const depIds = asStringArray(item.dependencies);
+    const dependencyEvents: LineageRef[] = evRows
+      .filter((e) => depIds.some((d) => idMatches(d, e.id)))
+      .map((e) => ({
+        id: e.id,
+        name: asText(e.name, e.id),
+        kind: "event",
+        href: `/project/${slug}/timeline?event=${e.id}`,
+        meta: asText(e.type) || undefined,
+      }));
+
+    return {
+      knowledgeId: id,
+      projectSlug: slug,
+      referencedBy,
+      eventsTouching,
+      conflictsTouching,
+      dependencyEvents,
+      evidenceCount: evCountRows.length,
+      generatedAt: new Date().toISOString(),
+    };
   },
 
   /** Uji koneksi: query tabel `projects`. */

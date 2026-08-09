@@ -85,3 +85,28 @@ export function asBoolean(v: unknown, dflt = false): boolean {
   if (v === "false" || v === 0 || v === "0") return false;
   return dflt;
 }
+
+/**
+ * Bangun DataProvenance dari kolom provenance mentah (nullable).
+ * `hasProvenance` true bila minimal satu kolom terisi — dipakai UI untuk
+ * memutuskan menampilkan provenance atau fallback "tidak tercatat".
+ * Tidak pernah melempar.
+ */
+export function buildProvenance(
+  source: unknown,
+  sourceUrl: unknown,
+  connector: unknown,
+  ingestedAt: unknown
+): import("@/lib/types/lineage").DataProvenance {
+  const s = asText(source);
+  const u = asText(sourceUrl);
+  const c = asText(connector);
+  const i = asText(ingestedAt);
+  return {
+    source: s,
+    sourceUrl: u,
+    connector: c,
+    ingestedAt: i,
+    hasProvenance: Boolean(s || u || c || i),
+  };
+}

@@ -250,6 +250,56 @@ Perbaikan: semua akses record lewat `to_jsonb(NEW)/to_jsonb(OLD) ->> 'kolom'`
 
 ---
 
+## 5.3 Fase 1 — Data Lineage & Impact Analysis (implemented)
+
+Melengkapi prioritas #1 (*Audit Trail & Data Lineage*) setelah Fase 0: menjawab
+"data ini berasal dari mana?" dan "kalau saya ubah, apa yang terpengaruh?".
+
+### Deliverable
+
+| Lapisan | Artefak |
+|---|---|
+| Tipe | `src/lib/types/lineage.ts` (`DataProvenance`, `LineageRef`, `KnowledgeImpact`, `idMatches`) |
+| Koersi | `src/db/coerce.ts` (+`buildProvenance`, tidak pernah melempar) |
+| Service | `src/db/supabaseService.ts` (+`getKnowledgeImpact`: 4 query konstan, filter di memori) |
+| Data service | `src/db/dataService.ts` (+`dbGetKnowledgeImpact` REST → pg → undefined) |
+| Repository server | `src/lib/api/server.ts` (+`lineageRepository.getImpact`, langsung DB) |
+| UI | `ImpactPanel` (stat + daftar referensi per kategori) · `ProvenanceCard` (source/connector/ingested_at) di sidebar · knowledge detail page diperkaya |
+| Dokumen | bagian ini |
+
+### Desain
+
+- **Provenance** dibaca dari kolom `source/source_url/connector/ingested_at`
+  (migrasi Phase 0); bila kolom belum terisi → `hasProvenance:false` →
+  `ProvenanceCard` menampilkan fallback informatif (bukan error).
+- **Impact analysis** = relasi terbalik: `related_knowledge`/`dependencies`
+  (knowledge lain yang mereferensikan), `events.affected_knowledge`,
+  `conflicts.affected_knowledge`, `evidence_items` count. 4 query konstan per
+  item — tanpa N+1.
+- **Data kotor produksi ditangani**: referensi memakai id pendek (`"K-002"`,
+  `"EV-013"`) sementara id baris penuh (`"arbitrum-K-002"`,
+  `"arbitrum-EV-013"`) → helper `idMatches` (suffix match) dipakai di semua
+  lookup; ini memperbaiki "Data Lineage" card lama yang kosong karena mismatch.
+- UI knowledge detail: `ProvenanceCard` (sidebar) + `ImpactPanel` (setelah
+  Evidence Registry, sebelum RowHistory) + daftar dependency events memakai
+  `idMatches`.
+
+### Verifikasi Fase 1
+
+- `tsc --noEmit` bersih; eslint bersih (file baru + tersentuh).
+- `next build` sukses; mirror data riil (arbitrum) → curl semua route 200
+  (<0.1s per route):
+  - `arbitrum-K-001` → ProvenanceCard "DefiLlama API / defillama-api",
+    Impact: "Knowledge yang mereferensikan" (arbitrum-K-010) + dependency
+    events (EV-013 suffix match).
+  - `arbitrum-K-002` → "Conflict yang terkait" C-001 (idMatches "K-002"),
+    provenance "cif-pipeline".
+  - `arbitrum-K-003` → "Event yang menyentuh" (EV-041 via affected_knowledge).
+  - `arbitrum-K-021` → empty-state impact + fallback provenance.
+  - Regresi: `/`, `/activity`, `/project/*`, API routes → 200.
+
+---
+
 ## 6. Roadmap Enterprise — Fase 1–6
 
 Prioritas (disetujui): **1) Audit Trail & Lineage → 2) RBAC & Workspace →
@@ -258,8 +308,8 @@ Prioritas (disetujui): **1) Audit Trail & Lineage → 2) RBAC & Workspace →
 
 | Fase | Modul | Isi | Status |
 |---|---|---|---|
-| **0** | Audit Trail & Workspace foundation | audit_log + trigger + provenance + workspaces + Activity Ledger + RowHistory | ✅ **Fase ini** |
-| **1** | Data Lineage & Impact Analysis | "data ini dari DefiLlama 2026-08-07 14:23"; siapa/mengubah/kapan/nilai; dampak perubahan ke Knowledge terkait (graf lineage di knowledge detail) | 📋 berikutnya |
+| **0** | Audit Trail & Workspace foundation | audit_log + trigger + provenance + workspaces + Activity Ledger + RowHistory | ✅ |
+| **1** | Data Lineage & Impact Analysis | provenance per data point (source/connector/ingested_at), graf lineage di knowledge detail, impact analysis (referensi balik: knowledge/event/conflict/evidence) + toleransi id pendek | ✅ **Fase ini** |
 | **2** | RBAC & Workspace penuh | RLS per role (admin/editor/viewer) pada tabel inti; management UI workspace + member; project templates (VC Due Diligence, Exchange Listing) | 📋 |
 | **3** | Enterprise API | API Gateway REST (+GraphQL), rate limiting & quota (metering/entitlements per tenant), webhook (mis. Slack saat conflict baru) | 📋 |
 | **4** | Pattern Detection | Automated pattern detection, anomaly detection, forecasting (tabel `cif_patterns/cif_backtests/cif_decision_events` siap dipakai) | 📋 |

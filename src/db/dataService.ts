@@ -47,8 +47,17 @@ import type { Conflict } from "@/lib/types/conflict";
 import type { SearchResult } from "@/lib/data";
 import type { ListParams } from "@/lib/api/types";
 import type { ActivityAction, ActivityEntry, ActivityFilters } from "@/lib/types/activity";
+import type { KnowledgeImpact, LineageRef } from "@/lib/types/lineage";
+import { idMatches } from "@/lib/types/lineage";
 import { supabaseRest, supabaseRestEnabled, changedFieldsBetween } from "./supabaseService";
-import { asConflictVersion, asJsonObject, asStringArray, asStringRecord, asText } from "./coerce";
+import {
+  asConflictVersion,
+  asJsonObject,
+  asStringArray,
+  asStringRecord,
+  asText,
+  buildProvenance,
+} from "./coerce";
 
 const ACTIVITY_ACTIONS: ActivityAction[] = ["INSERT", "UPDATE", "DELETE"];
 
@@ -334,6 +343,102 @@ export async function dbGetKnowledgeItem(
     return await rowToKnowledge(row);
   } catch {
     return getMockKnowledgeItem(slug, id);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════ */
+/* Data lineage & impact analysis (Fase 1)                            */
+/* ══════════════════════════════════════════════════════════════════ */
+
+/**
+ * Impact analysis untuk satu knowledge item. Prioritas sumber: Supabase REST
+ * → pg (DATABASE_URL) → undefined (halaman fallback ke empty-state).
+ * Referensi id pendek ("K-002", "EV-013") dicocokkan dengan id penuh
+ * ("arbitrum-K-002") — data produksi memakai id pendek pada
+ * related_knowledge/dependencies/affected_knowledge.
+ */
+export async function dbGetKnowledgeImpact(
+  slug: string,
+  id: string
+): Promise<KnowledgeImpact | undefined> {
+  if (REST) {
+    try {
+      const r = await supabaseRest.getKnowledgeImpact(slug, id);
+      if (r) return r;
+    } catch {
+      /* lanjut ke pg */
+    }
+  }
+  if (!db) return undefined;
+  try {
+    const [kn, evs, cfs, evRows] = await Promise.all([
+      db.select().from(knowledgeItems).where(eq(knowledgeItems.projectSlug, slug)),
+      db.select().from(eventsTable).where(eq(eventsTable.projectSlug, slug)),
+      db.select().from(conflictsTable).where(eq(conflictsTable.projectSlug, slug)),
+      db.select({ id: evidenceItems.id }).from(evidenceItems).where(eq(evidenceItems.knowledgeId, id)),
+    ]);
+    const item = kn.find((k) => k.id === id);
+    if (!item) return undefined;
+
+    const referencedBy: LineageRef[] = [];
+    for (const k of kn) {
+      if (k.id === id) continue;
+      const rel = asStringArray(k.relatedKnowledge).some((r) => idMatches(r, id));
+      const dep = asStringArray(k.dependencies).some((d) => idMatches(d, id));
+      if (rel || dep) {
+        referencedBy.push({
+          id: k.id,
+          name: asText(k.name, k.id),
+          kind: "knowledge",
+          href: `/project/${slug}/knowledge/${k.id}`,
+          meta: asText(k.category) || undefined,
+        });
+      }
+    }
+
+    const eventsTouching: LineageRef[] = evs
+      .filter((e) => asStringArray(e.affectedKnowledge).some((a) => idMatches(a, id)))
+      .map((e) => ({
+        id: e.id,
+        name: asText(e.name, e.id),
+        kind: "event",
+        href: `/project/${slug}/timeline?event=${e.id}`,
+        meta: asText(e.type) || undefined,
+      }));
+
+    const conflictsTouching: LineageRef[] = cfs
+      .filter((c) => asStringArray(c.affectedKnowledge).some((a) => idMatches(a, id)))
+      .map((c) => ({
+        id: c.id,
+        name: asText(c.title, c.id),
+        kind: "conflict",
+        href: `/project/${slug}/conflicts/${c.id}`,
+        meta: asText(c.status) || undefined,
+      }));
+
+    const depIds = asStringArray(item.dependencies);
+    const dependencyEvents: LineageRef[] = evs
+      .filter((e) => depIds.some((d) => idMatches(d, e.id)))
+      .map((e) => ({
+        id: e.id,
+        name: asText(e.name, e.id),
+        kind: "event",
+        href: `/project/${slug}/timeline?event=${e.id}`,
+        meta: asText(e.type) || undefined,
+      }));
+
+    return {
+      knowledgeId: id,
+      projectSlug: slug,
+      referencedBy,
+      eventsTouching,
+      conflictsTouching,
+      dependencyEvents,
+      evidenceCount: evRows.length,
+      generatedAt: new Date().toISOString(),
+    };
+  } catch {
+    return undefined;
   }
 }
 

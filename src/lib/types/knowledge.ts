@@ -24,4 +24,6 @@ export interface KnowledgeItem {
   evidence: Evidence[];
   relatedKnowledge: string[];
   dependencies: string[]; // event ids
+  /** Provenance (asal-usul data) — opsional, terisi bila kolom tersedia. */
+  provenance?: import("./lineage").DataProvenance;
 }

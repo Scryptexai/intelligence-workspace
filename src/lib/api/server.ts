@@ -32,6 +32,7 @@ import type { TimelineEvent } from "@/lib/types/event";
 import type { Conflict } from "@/lib/types/conflict";
 import type { QAReport, BehaviorProfile } from "@/lib/types/project";
 import type { ActivityEntry, ActivityFilters } from "@/lib/types/activity";
+import type { KnowledgeImpact } from "@/lib/types/lineage";
 import type { SearchResult } from "@/lib/data";
 
 const isMock = (): boolean => effectiveDataSource() === "mock";
@@ -178,6 +179,22 @@ export const activityRepository = {
       return await db.dbListActivity(filters);
     } catch {
       return [];
+    }
+  },
+};
+
+export const lineageRepository = {
+  /**
+   * Impact analysis untuk satu knowledge item — baca LANGSUNG dari DB
+   * (tanpa HTTP self-fetch). Tidak ditemukan / gagal → undefined (UI
+   * menampilkan empty-state yang informatif, bukan error).
+   */
+  async getImpact(slug: string, id: string): Promise<KnowledgeImpact | undefined> {
+    if (isMock()) return undefined;
+    try {
+      return await db.dbGetKnowledgeImpact(slug, id);
+    } catch {
+      return undefined;
     }
   },
 };
