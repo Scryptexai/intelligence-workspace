@@ -174,7 +174,7 @@ export function CommandPalette() {
           {/* bar input */}
           <div className="flex items-center gap-2 rounded-t-xl border border-border/60 border-b-0 bg-card px-4">
             {mode === "command" ? (
-              <Terminal className="h-4 w-4 shrink-0 text-primary" />
+              <span className="font-mono text-[15px] font-bold text-cif-signal-cyan">&gt;_</span>
             ) : mode === "mention" ? (
               <AtSign className="h-4 w-4 shrink-0 text-primary" />
             ) : (
@@ -227,7 +227,7 @@ export function CommandPalette() {
             {mode === "command" && (
               <div className="flex flex-col gap-0.5">
                 <div className="px-2 pb-1 pt-1 font-mono text-[9.5px] uppercase tracking-[0.2em] text-muted-foreground/70">
-                  Perintah
+                  Aksi
                 </div>
                 {commands.length === 0 ? (
                   <Empty text={`Tidak ada perintah untuk “${body}”`} />
@@ -330,6 +330,7 @@ export function CommandPalette() {
                           i === active ? "bg-primary/10" : "hover:bg-accent/60"
                         )}
                       >
+                        <span className={cn("h-2 w-2 shrink-0 rounded-full bg-current shadow-[0_0_10px_currentColor]", CATEGORY_COLOR[r.category])} />
                         <Icon className={cn("h-4 w-4 shrink-0", CATEGORY_COLOR[r.category])} />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-[13px] font-medium text-foreground">

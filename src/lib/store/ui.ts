@@ -24,7 +24,8 @@ export const useUIStore = create<UIState>((set) => ({
   searchOpen: false,
   density: "comfortable",
   viewMode: "comfortable",
-  explorerOpen: false,
+  // Chronicle menjadi navigasi utama; pengguna tetap dapat menutupnya via toolbar.
+  explorerOpen: true,
   inspectorOpen: false,
   toggleSidebar: () =>
     set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
