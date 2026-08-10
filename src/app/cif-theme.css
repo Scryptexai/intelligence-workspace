@@ -65,6 +65,11 @@
   color-scheme: dark;
 }
 
+/* ---------- Typography: rapat pada label, lega pada dokumen ---------- */
+h1, h2, h3 { letter-spacing: -0.02em; }
+p { line-height: 1.8; }
+.font-mono, .font-data { font-variant-numeric: tabular-nums; }
+
 /* ---------- Typography: data & angka = JetBrains Mono ---------- */
 .dark body {
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";

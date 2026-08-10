@@ -168,6 +168,13 @@ export default async function HomePage() {
       {/* ============ project grid + activity feed ============ */}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_300px]">
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          {projects.length === 0 && (
+            <div className="col-span-full rounded-lg border border-dashed border-border bg-card/40 px-6 py-14 text-center">
+              <Layers className="mx-auto mb-3 h-6 w-6 text-cif-signal-cyan" />
+              <h2 className="text-[14px] font-semibold text-foreground">Belum ada proyek di workspace</h2>
+              <p className="mx-auto mt-1 max-w-md text-[12px] text-muted-foreground">Registry proyek akan muncul setelah data tersedia dari sumber workspace yang terhubung.</p>
+            </div>
+          )}
           {projects.map((p) => {
             const trend = trendPct(sparklineSeries(`${p.slug}-home`, 14, 60, 8, true));
             const spark = sparklineSeries(`${p.slug}-home-score`, 14, 70, 6, true);
