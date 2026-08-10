@@ -83,6 +83,7 @@ export default async function KnowledgeDetailPage({
           <header>
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant={STATUS_VARIANT[item.status]}>{item.status}</Badge>
+              <SignalBars confidence={item.confidence} />
               <Badge variant="secondary" className="normal-case tracking-normal">
                 {item.category}
               </Badge>
@@ -119,7 +120,7 @@ export default async function KnowledgeDetailPage({
           {/* description — reading style */}
           <article className="mt-5">
             <p className="max-w-[70ch] text-[15px] leading-[1.8] text-foreground/95">
-              {item.description}
+              <HighlightIntelTerms text={item.description} />
             </p>
           </article>
 
@@ -136,6 +137,11 @@ export default async function KnowledgeDetailPage({
             <div className="relative space-y-3 pl-5">
               {/* vertical line */}
               <span className="absolute left-[7px] top-2 bottom-2 w-px bg-border" />
+              {item.evidence.length === 0 && (
+                <div className="rounded-lg border border-dashed border-border bg-muted/20 p-4 text-[12px] text-muted-foreground">
+                  Belum ada evidence terhubung untuk knowledge ini.
+                </div>
+              )}
               {item.evidence.map((ev, i) => (
                 <div key={ev.id} className="group relative">
                   <span
@@ -335,6 +341,23 @@ export default async function KnowledgeDetailPage({
       <PrivateNote slug={slug} id={item.id} title={`Private Note — ${item.id}`} />
     </div>
   );
+}
+
+function SignalBars({ confidence }: { confidence: number }) {
+  const filled = confidence >= 80 ? 3 : confidence >= 45 ? 2 : confidence > 0 ? 1 : 0;
+  return (
+    <span className="flex h-5 items-end gap-0.5" title={`Confidence ${confidence}%`} aria-label={`Confidence ${confidence}%`}>
+      {[1, 2, 3].map((bar) => (
+        <i key={bar} className={`w-1 rounded-sm ${bar <= filled ? "bg-cif-signal-cyan" : "bg-white/10"}`} style={{ height: `${bar * 5 + 3}px` }} />
+      ))}
+    </span>
+  );
+}
+
+/** Soroti kosakata intelijen tanpa mengubah isi data primer. */
+function HighlightIntelTerms({ text }: { text: string }) {
+  const terms = /(treasury|dao|governance|security|tokenomics)/gi;
+  return <>{text.split(terms).map((part, index) => /^(treasury|dao|governance|security|tokenomics)$/i.test(part) ? <mark key={index} className="search-hit">{part}</mark> : part)}</>;
 }
 
 function ArrowDown({ className }: { className?: string }) {
