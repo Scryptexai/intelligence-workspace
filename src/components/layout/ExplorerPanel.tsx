@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, Boxes, ChevronRight, FileText, GitMerge, Network } from "lucide-react";
+import { BookOpen, Boxes, ChevronRight, FileText, GitMerge, Network, ScrollText } from "lucide-react";
 import { useProjectsList } from "@/hooks/useProjectQuery";
 import { useKnowledgeQuery } from "@/hooks/useResourceQueries";
 import { cn } from "@/lib/utils/helpers";
 import { fingerprintId } from "@/lib/utils/fingerprint";
+import { useActivityQuery } from "@/hooks/useActivityQuery";
 
 /**
  * Explorer — Object Tree (gaya VS Code / Obsidian):
@@ -21,6 +22,7 @@ export function ExplorerPanel() {
   const slug = pathname.startsWith("/project/") ? pathname.split("/")[2] : undefined;
   const activeProject = list.find((p) => p.slug === slug);
   const { data: knowledge } = useKnowledgeQuery(slug);
+  const { data: activity } = useActivityQuery({ limit: 4 });
 
   return (
     <aside className="cif-explorer flex w-64 shrink-0 flex-col border-r border-border bg-card/60">
@@ -29,7 +31,19 @@ export function ExplorerPanel() {
       </div>
       <div className="flex-1 overflow-y-auto p-2">
         <div className="mb-1 px-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
-          Workspace
+          Recent intelligence
+        </div>
+        <div className="mb-3 border-l border-cif-signal-cyan/30 pl-2">
+          {activity?.length ? activity.map((entry) => (
+            <Link key={entry.id} href={`/activity?rowId=${encodeURIComponent(entry.rowId ?? "")}`} title={`${entry.tableName} · ${entry.actorLabel}`} className="relative mb-1.5 block rounded px-1 py-0.5 text-[10.5px] text-muted-foreground hover:bg-cif-elev-2 hover:text-foreground">
+              <span className="absolute -left-[7px] top-2 h-1.5 w-1.5 rounded-full bg-cif-signal-cyan" />
+              <span className="block truncate font-mono text-[9px] text-cif-signal-cyan">{entry.rowId ?? entry.tableName}</span>
+              <span className="block truncate">{entry.action.toLowerCase()} oleh {entry.actorLabel}</span>
+            </Link>
+          )) : <div className="px-1 py-1 text-[10.5px] text-muted-foreground">Belum ada aktivitas tercatat.</div>}
+        </div>
+        <div className="mb-1 flex items-center gap-1.5 px-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
+          <ScrollText className="h-3 w-3" /> Workspace
         </div>
         <Link
           href="/"

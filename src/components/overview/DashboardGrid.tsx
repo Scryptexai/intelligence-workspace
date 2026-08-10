@@ -36,19 +36,20 @@ import {
 import { sparklineSeries, trendPct, projectGradient } from "@/lib/brand";
 
 const DEFAULT_LAYOUT: Layout = [
-  { i: "metric-cif", x: 0, y: 0, w: 2, h: 3 },
-  { i: "metric-confidence", x: 2, y: 0, w: 2, h: 3 },
-  { i: "metric-knowledge", x: 4, y: 0, w: 2, h: 3 },
+  // Struktur "The Pulse / The Signal": panel kerja lebar + signal rail sempit.
+  { i: "metric-cif", x: 0, y: 0, w: 3, h: 3 },
+  { i: "metric-coverage", x: 3, y: 0, w: 3, h: 3 },
   { i: "metric-conflicts", x: 6, y: 0, w: 2, h: 3 },
-  { i: "metric-coverage", x: 8, y: 0, w: 2, h: 3 },
-  { i: "metric-entities", x: 10, y: 0, w: 2, h: 3 },
-  { i: "market-tvl", x: 0, y: 3, w: 4, h: 3 },
-  { i: "market-price", x: 4, y: 3, w: 4, h: 3 },
-  { i: "market-volume", x: 8, y: 3, w: 4, h: 3 },
-  { i: "partners", x: 0, y: 6, w: 12, h: 2 },
-  { i: "knowledge", x: 0, y: 8, w: 7, h: 11 },
-  { i: "quicklinks", x: 7, y: 8, w: 5, h: 6 },
-  { i: "signals", x: 7, y: 14, w: 5, h: 5 },
+  { i: "metric-confidence", x: 0, y: 3, w: 2, h: 3 },
+  { i: "metric-knowledge", x: 2, y: 3, w: 2, h: 3 },
+  { i: "metric-entities", x: 4, y: 3, w: 2, h: 3 },
+  { i: "market-tvl", x: 6, y: 3, w: 2, h: 3 },
+  { i: "market-price", x: 0, y: 6, w: 4, h: 3 },
+  { i: "market-volume", x: 4, y: 6, w: 4, h: 3 },
+  { i: "partners", x: 0, y: 9, w: 8, h: 2 },
+  { i: "knowledge", x: 0, y: 11, w: 8, h: 11 },
+  { i: "signals", x: 8, y: 0, w: 4, h: 12 },
+  { i: "quicklinks", x: 8, y: 12, w: 4, h: 10 },
 ];
 
 interface MetricSpec {
@@ -77,7 +78,7 @@ export function DashboardGrid({ slug }: { slug: string }) {
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(`iw-layout-${slug}-v2`);
+      const saved = localStorage.getItem(`iw-layout-${slug}-v3`);
       if (saved) {
         const parsed = JSON.parse(saved) as Layout;
         if (Array.isArray(parsed) && parsed.length > 0) setLayout(parsed);
@@ -178,6 +179,14 @@ export function DashboardGrid({ slug }: { slug: string }) {
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 6);
 
+  const criticalConflicts = (data?.conflicts ?? [])
+    .filter((c) => c.status === "Unresolved")
+    .sort((a, b) => {
+      const rank = { Critical: 4, High: 3, Medium: 2, Low: 1 };
+      return rank[b.severity] - rank[a.severity];
+    })
+    .slice(0, 2);
+
   const quickLinks = [
     { href: `/project/${slug}/knowledge`, label: "Knowledge", icon: BookOpen, desc: `${project.knowledgeCount} items · traceable` },
     { href: `/project/${slug}/graph`, label: "Entity Graph", icon: Network, desc: `${project.entityCount} entities` },
@@ -212,7 +221,7 @@ export function DashboardGrid({ slug }: { slug: string }) {
       onLayoutChange={(next) => {
         setLayout(next);
         try {
-          localStorage.setItem(`iw-layout-${slug}-v2`, JSON.stringify(next));
+          localStorage.setItem(`iw-layout-${slug}-v3`, JSON.stringify(next));
         } catch {
           /* ignore */
         }
@@ -312,26 +321,28 @@ export function DashboardGrid({ slug }: { slug: string }) {
           <CardTitle className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             <GripVertical className="h-3 w-3 text-muted-foreground/50" />
             <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse-dot" />
-            Recent Signals
+            The Signal
           </CardTitle>
         </CardHeader>
-        <CardContent
-          className="space-y-0.5 overflow-y-auto p-3 pt-1"
-          style={{ maxHeight: "calc(100% - 44px)" }}
-        >
-          {recentEvents.map((ev) => (
-            <Link
-              key={ev.id}
-              href={`/project/${slug}/timeline?event=${ev.id}`}
-              className="flex items-center gap-2 rounded px-1.5 py-1 transition-colors hover:bg-accent/60"
-            >
-              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: EVENT_COLORS[ev.type] ?? "#64748b" }} />
-              <span className="min-w-0 flex-1 truncate text-[11.5px] text-foreground/90">{ev.name}</span>
-              <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-                {new Date(ev.date).toLocaleDateString("en-US", { month: "short", year: "numeric" })}
-              </span>
-            </Link>
-          ))}
+        <CardContent className="space-y-3 overflow-y-auto p-3 pt-1" style={{ maxHeight: "calc(100% - 44px)" }}>
+          <section>
+            <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[.14em] text-muted-foreground">Unresolved conflicts</div>
+            {criticalConflicts.length ? criticalConflicts.map((conflict) => (
+              <Link key={conflict.id} href={`/project/${slug}/conflicts/${conflict.id}`} className="mb-1 block rounded border border-cif-signal-rose/20 bg-cif-signal-rose/5 p-2 hover:border-cif-signal-rose/50">
+                <div className="flex gap-2"><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cif-signal-rose mt-1.5" /><span className="line-clamp-2 text-[11px] font-medium text-foreground">{conflict.title}</span></div>
+                <div className="mt-1 font-mono text-[9px] text-cif-signal-rose">{conflict.severity} · {conflict.id}</div>
+              </Link>
+            )) : <p className="text-[10.5px] text-muted-foreground">Tidak ada conflict unresolved.</p>}
+          </section>
+          <section>
+            <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[.14em] text-muted-foreground">Pulse timeline</div>
+            {recentEvents.map((ev) => (
+              <Link key={ev.id} href={`/project/${slug}/timeline?event=${ev.id}`} className="flex items-center gap-2 rounded px-1.5 py-1 transition-colors hover:bg-accent/60">
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: EVENT_COLORS[ev.type] ?? "#64748b" }} />
+                <span className="min-w-0 flex-1 truncate text-[11.5px] text-foreground/90">{ev.name}</span>
+              </Link>
+            ))}
+          </section>
         </CardContent>
       </div>
     </ResponsiveGridLayout>

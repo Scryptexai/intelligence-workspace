@@ -40,28 +40,28 @@
 
 .dark {
   /* — The Dark Archive — */
-  --background: #0b0e11; /* Primary Canvas */
-  --foreground: #d8dee9;
-  --card: #161b22; /* Secondary Element */
-  --card-foreground: #d8dee9;
-  --popover: #10151b;
-  --popover-foreground: #d8dee9;
-  --primary: #f59e0b; /* Data Highlight — amber */
-  --primary-foreground: #1c1202;
-  --secondary: #1d242d;
-  --secondary-foreground: #d8dee9;
-  --muted: #13181f;
-  --muted-foreground: #7d8ea3;
-  --accent: #103d3a; /* teal-tinted accent */
-  --accent-foreground: #99f6e4;
-  --destructive: #fb7185; /* Conflict Alert — rose */
-  --destructive-foreground: #3b0713;
-  --border: #212a35;
-  --input: #212a35;
-  --ring: #f59e0b;
-  --success: #a3e635; /* Stability — lime */
-  --warning: #f59e0b;
-  --critical: #fb7185;
+  --background: #0A0D14;
+  --foreground: #F1F5F9;
+  --card: #131A24;
+  --card-foreground: #F1F5F9;
+  --popover: #131A24;
+  --popover-foreground: #F1F5F9;
+  --primary: #8B5CF6;
+  --primary-foreground: #F1F5F9;
+  --secondary: #1C2636;
+  --secondary-foreground: #F1F5F9;
+  --muted: #131A24;
+  --muted-foreground: #94A3B8;
+  --accent: #1C2636;
+  --accent-foreground: #F1F5F9;
+  --destructive: #FB7185;
+  --destructive-foreground: #21070d;
+  --border: #1E293B;
+  --input: #1E293B;
+  --ring: #8B5CF6;
+  --success: #4ADE80;
+  --warning: #F59E0B;
+  --critical: #FB7185;
   color-scheme: dark;
 }
 
@@ -83,6 +83,13 @@
 .ui-label {
   letter-spacing: 0.05em;
 }
+
+/* scanline nyaris tak terlihat: memberi kedalaman tanpa mengganggu keterbacaan */
+.cif-scanlines {
+  background-image: repeating-linear-gradient(0deg, rgba(241,245,249,.018) 0, rgba(241,245,249,.018) 1px, transparent 1px, transparent 5px);
+  animation: cifScan 18s linear infinite;
+}
+@keyframes cifScan { to { background-position: 0 80px; } }
 
 /* ---------- Grid overlay: "kertas grafik laboratorium" ---------- */
 .cif-grid-bg {

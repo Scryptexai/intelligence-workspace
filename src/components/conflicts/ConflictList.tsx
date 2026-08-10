@@ -60,7 +60,13 @@ const ConflictRow = memo(function ConflictRow({
           <ImpactBadge score={impact} />
         </div>
       </div>
-      <p className="mt-1.5 line-clamp-2 text-[12px] leading-relaxed text-muted-foreground">
+      {/* Diff preview: dua klaim yang berlawanan dibaca sebelum dossier dibuka. */}
+      <div className={cn("mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-md border px-2.5 py-2 font-mono text-[11px]", resolved ? "border-success/20 bg-success/5" : "border-critical/20 bg-critical/5")}>
+        <span className="truncate text-critical line-through decoration-critical/70" title={conflict.versionA.source}>{conflict.versionA.value || conflict.versionA.source}</span>
+        <span className="text-muted-foreground/60">→</span>
+        <span className="truncate text-success" title={conflict.versionB.source}>{conflict.versionB.value || conflict.versionB.source}</span>
+      </div>
+      <p className="mt-2 line-clamp-1 text-[12px] leading-relaxed text-muted-foreground">
         {conflict.description}
       </p>
       <div className="mt-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-muted-foreground">

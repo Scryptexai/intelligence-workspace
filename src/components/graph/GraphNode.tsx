@@ -97,7 +97,7 @@ export const GraphNode = memo(function GraphNode({
   return (
     <div
       className={cn(
-        "group relative w-[210px] select-none rounded-2xl border bg-[#10151d]/90 shadow-lg backdrop-blur-sm transition-all duration-200",
+        "group relative w-[210px] select-none border bg-[#131A24]/90 shadow-lg backdrop-blur-sm transition-all duration-200 [clip-path:polygon(8%_0,92%_0,100%_18%,100%_82%,92%_100%,8%_100%,0_82%,0_18%)]", 
         faded && "pointer-events-none opacity-[0.1]",
         focused &&
           "border-cyan-400/50 shadow-[0_0_28px_rgba(34,211,238,0.22)] ring-1 ring-cyan-400/30",

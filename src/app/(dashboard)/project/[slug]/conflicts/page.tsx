@@ -25,6 +25,8 @@ export default async function ConflictsPage({
   ]);
   if (!project) notFound();
   const critical = conflicts.filter((c) => c.severity === "Critical").length;
+  const unresolved = conflicts.filter((c) => c.status === "Unresolved").length;
+  const resolved = conflicts.filter((c) => c.status === "Resolved").length;
   const initialSeverity = VALID_SEVERITY.includes(severity as never)
     ? (severity as (typeof VALID_SEVERITY)[number])
     : "All";
@@ -48,7 +50,18 @@ export default async function ConflictsPage({
         <Badge variant="muted">{conflicts.length} conflicts</Badge>
       </PageHeader>
 
-      {/* war-room analytics */}
+      {/* War-room signal: keputusan terbuka dan yang sudah ditutup. */}
+      <div className="mb-4 grid grid-cols-2 gap-3">
+        <div className="rounded-lg border border-cif-signal-rose/25 bg-cif-signal-rose/5 p-4">
+          <div className="font-mono text-3xl font-bold tabular-nums text-cif-signal-rose">{unresolved}</div>
+          <div className="mt-1 text-[10px] font-semibold uppercase tracking-[.14em] text-muted-foreground">Unresolved</div>
+        </div>
+        <div className="rounded-lg border border-cif-signal-green/25 bg-cif-signal-green/5 p-4">
+          <div className="font-mono text-3xl font-bold tabular-nums text-cif-signal-green">{resolved}</div>
+          <div className="mt-1 text-[10px] font-semibold uppercase tracking-[.14em] text-muted-foreground">Resolved</div>
+        </div>
+      </div>
+
       <ConflictAnalytics conflicts={conflicts} />
 
       <ConflictListWithSync

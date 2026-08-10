@@ -36,7 +36,7 @@ export default async function GraphPage({
         <Badge variant="muted">{relationships.length} relationships</Badge>
       </PageHeader>
 
-      <div className="h-[calc(100vh-320px)] min-h-[560px] overflow-hidden rounded-lg border border-border bg-grid">
+      <div className="cif-grid-bg h-[calc(100vh-320px)] min-h-[560px] overflow-hidden rounded-lg border border-border bg-cif-canvas">
         <EntityGraphLoader
           entities={entities}
           relationships={relationships}
